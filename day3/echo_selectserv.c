@@ -8,7 +8,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-// 203.252.112.31
+// 203.252.112.31`
 #define BUF_SiZE 1024
 
 void error_handling(char *msg);
