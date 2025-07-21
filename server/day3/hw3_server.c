@@ -20,9 +20,6 @@ typedef struct
     char file_name[BUF_SIZE][100];
     long file_size[BUF_SIZE];
 
-    int check;
-    int is_active;  // 활성 연결 여부 체크
-
 } file_information;
 
 typedef struct
@@ -39,6 +36,14 @@ typedef struct
     int is_dir;
     int dir_index;
 } message;
+
+typedef struct{
+    int fd;
+    file_information file_info;
+    pkt file_pkt;
+    int init;
+    message check_msg;
+}sock_cnt;
 
 void error_handling(char *msg);
 
@@ -59,14 +64,9 @@ int main(int argc, char *argv[])
     DIR *dp;
     struct dirent *file;
     struct stat sb;
-    file_information file_info[BUF_SIZE];
-    file_information serv_info;
-    pkt data_index;
-    message check_msg;
 
-    // 초기화
-    memset(file_info, 0, sizeof(file_info));
-    
+    sock_cnt *serv_cnt;
+
     int dir_idx = 0, file_idx = 0;
 
     if (argc != 2)
@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    serv_cnt = malloc(sizeof(sock_cnt) * BUF_SIZE);
     // 소켓 생성
     serv_sock = socket(PF_INET, SOCK_STREAM, 0);
     if (serv_sock == -1)
@@ -111,7 +112,6 @@ int main(int argc, char *argv[])
     
 
     char file_path[100];
-    int index=0;
 
     while (1)
     {
@@ -132,19 +132,19 @@ int main(int argc, char *argv[])
                 event.events = EPOLLIN;
                 event.data.fd = clnt_sock;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, clnt_sock, &event);
-
-                file_info[clnt_sock].check = 1;
-                file_info[clnt_sock].is_active = 1;
                 printf("connected client: %d \n", clnt_sock);
+
+                serv_cnt[clnt_sock].fd = clnt_sock;
+                serv_cnt[clnt_sock].init = 1;
             }
             else
             {
                 // event가 read를 감지하고 있기에
-                if (file_info[ep_events[i].data.fd].check)
-                {   
+                if (serv_cnt[ep_events[i].data.fd].init)
+                {
                     read(ep_events[i].data.fd, &start, sizeof(int));
                     printf("Start: %d\n", start);
-                    file_info[ep_events[i].data.fd].check = 0;
+                    serv_cnt[ep_events[i].data.fd].init = 0;
 
                     dp = opendir(".");
 
@@ -161,57 +161,56 @@ int main(int argc, char *argv[])
                         {
                             error_handling("stat(), error");
                         }
-                        
 
                         if (S_ISDIR(sb.st_mode))
                         {
-                            strcpy(file_info[ep_events[i].data.fd].dir_name[dir_idx++], file->d_name);
+                            strcpy(serv_cnt[ep_events[i].data.fd].file_info.dir_name[dir_idx++], file->d_name);
                         }
                         else if (S_ISREG(sb.st_mode))
                         {
-                            strcpy(file_info[ep_events[i].data.fd].file_name[file_idx], file->d_name);
-                            file_info[ep_events[i].data.fd].file_size[file_idx++] = sb.st_size;
+                            strcpy(serv_cnt[ep_events[i].data.fd].file_info.file_name[file_idx], file->d_name);
+                            serv_cnt[ep_events[i].data.fd].file_info.file_size[file_idx++] = sb.st_size;
                         }
                     }
                     // 디렉토리 개수, 파일개수 먼저 보내기
-                    data_index.dir_index = dir_idx;
-                    data_index.file_index = file_idx;
-                    write(ep_events[i].data.fd, &data_index, sizeof(pkt));
+                    serv_cnt[ep_events[i].data.fd].file_pkt.dir_index = dir_idx;
+                    serv_cnt[ep_events[i].data.fd].file_pkt.file_index = file_idx;
+                    write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt, sizeof(pkt));
 
                     // 디렉토리 이름 & 파일 이름, 사이즈 보내기
                     for (int j = 0; j < dir_idx; j++)
                     {
-                        data_index.name_len = strlen(file_info[ep_events[i].data.fd].dir_name[j]);
-                        write(ep_events[i].data.fd, &data_index.name_len, sizeof(int));
-                        write(ep_events[i].data.fd, file_info[ep_events[i].data.fd].dir_name[j], data_index.name_len);
+                        serv_cnt[ep_events[i].data.fd].file_pkt.name_len = strlen(serv_cnt[ep_events[i].data.fd].file_info.dir_name[j]);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt.name_len, sizeof(int));
+                        write(ep_events[i].data.fd, serv_cnt[ep_events[i].data.fd].file_info.dir_name[j], serv_cnt[ep_events[i].data.fd].file_pkt.name_len);
                     }
 
                     for (int j = 0; j < file_idx; j++)
                     {
-                        data_index.name_len = strlen(file_info[ep_events[i].data.fd].file_name[j]);
-                        write(ep_events[i].data.fd, &data_index.name_len, sizeof(int));
-                        write(ep_events[i].data.fd, file_info[ep_events[i].data.fd].file_name[j], data_index.name_len);
-                        write(ep_events[i].data.fd, &file_info[ep_events[i].data.fd].file_size[j], sizeof(long));
+                        serv_cnt[ep_events[i].data.fd].file_pkt.name_len = strlen(serv_cnt[ep_events[i].data.fd].file_info.file_name[j]);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt.name_len, sizeof(int));
+                        write(ep_events[i].data.fd, serv_cnt[ep_events[i].data.fd].file_info.file_name[j], serv_cnt[ep_events[i].data.fd].file_pkt.name_len);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_info.file_size[j], sizeof(long));
                     }
 
                     closedir(dp);
                 }
                 else
                 {
-                    read(ep_events[i].data.fd, &check_msg, sizeof(message));
+                    read(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].check_msg, sizeof(message));
                 }
 
                 // 디렉토리 선택
-                if (check_msg.msg == 'B')
+                if (serv_cnt[ep_events[i].data.fd].check_msg.msg == 'B')
                 {
 
-                    if(check_msg.dir_index == -1){
+                    if(serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1){
                         dp = opendir(".");
                         printf("Present dir_name: %s\n", "prsent dir");
                     }
                     else{
-                        dp = opendir(file_info[ep_events[i].data.fd].dir_name[check_msg.index - 1]);
-                        printf("Present dir_name: %s\n", file_info[ep_events[i].data.fd].dir_name[check_msg.index - 1]);
+                        dp = opendir(serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
+                        printf("Present dir_name: %s\n", serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
                     }
 
                     
@@ -225,12 +224,12 @@ int main(int argc, char *argv[])
                             continue;
                         }
 
-                        if(check_msg.dir_index == -1){
+                        if(serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1){
                             strcpy(file_path, file->d_name);
                         }
                         else{
                             strcpy(file_path, "./");
-                            strcat(file_path, file_info[ep_events[i].data.fd].dir_name[check_msg.index - 1]);
+                            strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
                             strcat(file_path, "/");
                             strcat(file_path, file->d_name);
                         }
@@ -243,54 +242,54 @@ int main(int argc, char *argv[])
 
                         if (S_ISDIR(sb.st_mode))
                         {
-                            strcpy(file_info[ep_events[i].data.fd].dir_name[dir_idx++], file->d_name);
+                            strcpy(serv_cnt[ep_events[i].data.fd].file_info.dir_name[dir_idx++], file->d_name);
                         }
                         else if (S_ISREG(sb.st_mode))
                         {
-                            strcpy(file_info[ep_events[i].data.fd].file_name[file_idx], file->d_name);
-                            file_info[ep_events[i].data.fd].file_size[file_idx++] = sb.st_size;
+                            strcpy(serv_cnt[ep_events[i].data.fd].file_info.file_name[file_idx], file->d_name);
+                            serv_cnt[ep_events[i].data.fd].file_info.file_size[file_idx++] = sb.st_size;
                         }
                     }
                     // 디렉토리 개수, 파일개수 먼저 보내기
-                    data_index.dir_index = dir_idx;
-                    data_index.file_index = file_idx;
-                    write(ep_events[i].data.fd, &data_index, sizeof(pkt));
+                    serv_cnt[ep_events[i].data.fd].file_pkt.dir_index = dir_idx;
+                    serv_cnt[ep_events[i].data.fd].file_pkt.file_index = file_idx;
+                    write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt, sizeof(pkt));
 
                     // 디렉토리 이름 & 파일 이름, 사이즈 보내기
                     for (int j = 0; j < dir_idx; j++)
                     {
-                        data_index.name_len = strlen(file_info[ep_events[i].data.fd].dir_name[j]);
-                        write(ep_events[i].data.fd, &data_index.name_len, sizeof(int));
-                        write(ep_events[i].data.fd, file_info[ep_events[i].data.fd].dir_name[j], data_index.name_len);
+                        serv_cnt[ep_events[i].data.fd].file_pkt.name_len = strlen(serv_cnt[ep_events[i].data.fd].file_info.dir_name[j]);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt.name_len, sizeof(int));
+                        write(ep_events[i].data.fd, serv_cnt[ep_events[i].data.fd].file_info.dir_name[j], serv_cnt[ep_events[i].data.fd].file_pkt.name_len);
                     }
 
                     for (int j = 0; j < file_idx; j++)
                     {
-                        data_index.name_len = strlen(file_info[ep_events[i].data.fd].file_name[j]);
-                        write(ep_events[i].data.fd, &data_index.name_len, sizeof(int));
-                        write(ep_events[i].data.fd, file_info[ep_events[i].data.fd].file_name[j], data_index.name_len);
-                        write(ep_events[i].data.fd, &file_info[ep_events[i].data.fd].file_size[j], sizeof(long));
+                        serv_cnt[ep_events[i].data.fd].file_pkt.name_len = strlen(serv_cnt[ep_events[i].data.fd].file_info.file_name[j]);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_pkt.name_len, sizeof(int));
+                        write(ep_events[i].data.fd, serv_cnt[ep_events[i].data.fd].file_info.file_name[j], serv_cnt[ep_events[i].data.fd].file_pkt.name_len);
+                        write(ep_events[i].data.fd, &serv_cnt[ep_events[i].data.fd].file_info.file_size[j], sizeof(long));
                     }
 
                     closedir(dp);
                 }
 
                 // 파일 내용 전송
-                if (check_msg.msg == 'D')
+                if (serv_cnt[ep_events[i].data.fd].check_msg.msg == 'D')
                 {
                     int read_cnt;
                     char buf[BUF_SIZE];
 
-                    if(check_msg.is_dir){
+                    if(serv_cnt[ep_events[i].data.fd].check_msg.is_dir){
                         strcpy(file_path, "./");
-                        strcat(file_path, file_info[ep_events[i].data.fd].dir_name[check_msg.dir_index - 1]);
+                        strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.dir_index - 1]);
                         strcat(file_path, "/");
-                        strcat(file_path, file_info[ep_events[i].data.fd].file_name[check_msg.index - 1]);
+                        strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
 
                         fp = fopen(file_path, "rb");
                     }
                     else{
-                        fp = fopen(file_info[ep_events[i].data.fd].file_name[check_msg.index-1], "rb");
+                        fp = fopen(serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index-1], "rb");
                     }
 
                     while ((read_cnt = fread((void *)buf, 1, BUF_SIZE, fp)) > 0)
@@ -301,16 +300,14 @@ int main(int argc, char *argv[])
                 }
 
                 // 클라이언트 소켓 종료
-                if (check_msg.msg == 'E')
+                if (serv_cnt[ep_events[i].data.fd].check_msg.msg == 'E')
                 {
-                    epoll_ctl(epfd, EPOLL_CTL_DEL, ep_events[i].data.fd, NULL);
-                    file_info[ep_events[i].data.fd].is_active = 0;  // 연결 비활성화 표시
-                    memset(&file_info[ep_events[i].data.fd], 0, sizeof(file_information));  // 데이터 초기화
+                    epoll_ctl(epfd, EPOLL_CTL_DEL, ep_events[i].data.fd, NULL); // 리눅스 2.6.9 이전에는 NULL 전달 X(비록 전달된 값은 무시됨)
                     close(ep_events[i].data.fd);
                     printf("Closed client: %d\n", ep_events[i].data.fd);
                 }
 
-                if (check_msg.msg == 'F')
+                if (serv_cnt[ep_events[i].data.fd].check_msg.msg == 'F')
                 {
                     char file_name[100];
                     int file_len;
