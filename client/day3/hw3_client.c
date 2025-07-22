@@ -44,7 +44,6 @@ int main(int argc, char *argv[])
     struct sockaddr_in serv_addr;
 
     int start = 0;
-    int str_len;
 
     FILE *fp;
     DIR *dp;
@@ -123,15 +122,11 @@ int main(int argc, char *argv[])
         fputs("-------------------------------\n", stdout);
         fputs("Input: A (print file list)\n", stdout);
         fputs("Input: B (select directory)\n", stdout);
-        fputs("Input: C (quit)\n\n", stdout);
         fputs("Input: D (select file)\n", stdout);
-        fputs("Input: E (closed connet)\n", stdout);
+        fputs("Input: E (closed connet & quit)\n", stdout);
         fputs("Input: F (upload server)\n", stdout);
 
         fgets(input, BUF_SIZE, stdin);
-
-        if (!strcmp(input, "C\n"))
-            break;
 
         if (!strcmp(input, "A\n"))
         {
@@ -140,6 +135,7 @@ int main(int argc, char *argv[])
                 printf("%d. dir_name: %s\n\n", i + 1, file_info.dir_name[i]);
             }
 
+            printf("-------------------------------\n");
             for (int i = 0; i < data_index.file_index; i++)
             {
                 printf("%d. file_name: %s\n", i + 1, file_info.file_name[i]);
@@ -153,8 +149,6 @@ int main(int argc, char *argv[])
             fputs("Input directory number( -1 -> cd ..): ", stdout);
             fgets(char_num, BUF_SIZE, stdin);
             dir_num = atoi(char_num);
-
-            // 전 디렉토리로 돌아가기(cd ..)
 
             check_msg.msg = 'B';
             check_msg.index = dir_num;
@@ -210,6 +204,8 @@ int main(int argc, char *argv[])
         {
             check_msg.msg = 'E';
             write(sock, &check_msg, sizeof(message));
+
+            break;
         }
 
         if (!strcmp(input, "F\n"))
