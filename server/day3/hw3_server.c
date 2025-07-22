@@ -14,6 +14,8 @@
 #define BUF_SIZE 1024
 #define EPOLL_SIZE 1024
 // 203.252.112.31
+
+// 파일 정보(디렉토리이름, 파일이름, 파일사이즈) 구조체
 typedef struct
 {
     char dir_name[BUF_SIZE][100];
@@ -22,6 +24,7 @@ typedef struct
 
 } file_information;
 
+// 파일 개수, 파일 이름
 typedef struct
 {
     int dir_index;
@@ -76,6 +79,7 @@ int main(int argc, char *argv[])
     }
 
     serv_cnt = malloc(sizeof(sock_cnt) * BUF_SIZE);
+    
     // 소켓 생성
     serv_sock = socket(PF_INET, SOCK_STREAM, 0);
     if (serv_sock == -1)
@@ -139,7 +143,6 @@ int main(int argc, char *argv[])
             }
             else
             {
-                // event가 read를 감지하고 있기에
                 if (serv_cnt[ep_events[i].data.fd].init)
                 {
                     read(ep_events[i].data.fd, &start, sizeof(int));
@@ -206,7 +209,7 @@ int main(int argc, char *argv[])
 
                     if(serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1){
                         dp = opendir(".");
-                        printf("Present dir_name: %s\n", "prsent dir");
+                        printf("Present dir_name: %s\n", "present dir");
                     }
                     else{
                         dp = opendir(serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
@@ -335,6 +338,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    free(serv_cnt);
     close(serv_sock);
     return 0;
 }
