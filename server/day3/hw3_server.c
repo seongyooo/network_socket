@@ -140,6 +140,7 @@ int main(int argc, char *argv[])
 
                 serv_cnt[clnt_sock].fd = clnt_sock;
                 serv_cnt[clnt_sock].init = 1;
+                // 서버 초기 정보 전달.
             }
             else
             {
@@ -283,6 +284,7 @@ int main(int argc, char *argv[])
                     int read_cnt;
                     char buf[BUF_SIZE];
 
+                    // 구조체에 현재 클라이언트 path 경로 저장 
                     if(serv_cnt[ep_events[i].data.fd].check_msg.is_dir){
                         strcpy(file_path, "./");
                         strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.dir_index - 1]);
@@ -295,6 +297,7 @@ int main(int argc, char *argv[])
                         fp = fopen(serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index-1], "rb");
                     }
 
+                    // 멀티 플렉싱 구현 안됨.
                     while ((read_cnt = fread((void *)buf, 1, BUF_SIZE, fp)) > 0)
                     {
                         write(ep_events[i].data.fd, buf, read_cnt);

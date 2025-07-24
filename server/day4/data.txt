@@ -1,0 +1,39 @@
+Pohang 350000
+Pohang weather 95000
+Pohang restaurants 120000
+Pohang cafe 85000
+Pohang travel 78000
+Pohang hotel 45000
+Pohang KTX schedule 32000
+Jukdo Market 65000
+Jukdo Market food 48000
+Yeongildae Beach 72000
+Yeongildae restaurants 51000
+Yeongildae cafe 42000
+Homigot 68000
+Homigot sunrise time 28000
+Seoul 900000
+Seoul weather 250000
+Seoul restaurants 320000
+Gangnam restaurants 180000
+Hongdae restaurants 195000
+Python 450000
+Python tutorial 150000
+Java 420000
+JavaScript 380000
+C programming 390000
+C++ 350000
+React tutorial 280000
+Linux commands 95000
+YouTube 2500000
+Netflix 1800000
+today's weather 850000
+restaurant recommendation 550000
+movie rankings 650000
+lotto winning numbers 720000
+Samsung 980000
+Apple 950000
+iPhone 880000
+Galaxy 850000
+Amazon 2200000
+Google 3000000

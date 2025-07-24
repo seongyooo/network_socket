@@ -8,6 +8,7 @@
 
 #define BUF_SIZE 100
 #define MAX_CLNT 256
+// 203.252.112.31
 
 void * handle_clnt(void *arg);
 void send_msg(char * msg, int len);
