@@ -160,19 +160,17 @@ void *handle_clnt(void *arg)
         }
 
         printf("count: %d\n", count);
+        if(count > 10) count = 10;
+        write(clnt_sock, &count, sizeof(int));
 
         qsort(search_list, count, sizeof(data_cnt), compare);
         for (int i = 0; i < count; i++)
         {
-            if (count == 11)
-                break;
-
             str_len = strlen(search_list[i].data_info.data_name);
             printf("test: %s, len: %d\n", search_list[i].data_info.data_name, str_len);
             write(clnt_sock, &str_len, sizeof(int));
             write(clnt_sock, search_list[i].data_info.data_name, str_len);
         }
-        // write(clnt_sock, "\n", 1);
     }
 
     close(clnt_sock);
