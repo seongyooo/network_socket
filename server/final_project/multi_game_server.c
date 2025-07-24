@@ -12,6 +12,33 @@
 #define BUF_SIZE 1024
 void error_handling(char *msg);
 
+// Initialize
+typedef struct{
+    // int flag; // 현재 보내진 데이터 패킷이 어떤 데이터인지 flag가 정확히 뭐를 의미하는지?
+
+    int player_cnt;
+    int player_id;
+
+    int grid_size;
+    int panel_cnt;
+    int panel_pos[BUF_SIZE]; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
+    int game_time;
+}clnt_init;
+
+// Game Info
+typedef struct{
+    int flag; // 데이터가 어떤 event를 발생시켰는지 판단(이동, 뒤집기)
+    int panel_data; // 판의 대한 정보만 보내도 된다. 이미 초기값을 통해, 전체 grid 정보는 넘어갔으니
+    int player_pos[BUF_SIZE];
+    int left_time;
+}game_data;
+
+// Game Over
+typedef struct{
+    int socore; // winner 판단은 client가 계산 -> 이거는 구현하면서 서버, clien 둘 중 편한 부분에 구현 
+}game_result;
+
+
 int main(int argc, char *argv[]){
     int serv_sock;
     socklen_t clnt_adr_sz;
