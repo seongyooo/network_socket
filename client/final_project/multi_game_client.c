@@ -8,6 +8,11 @@
 #define BUF_SIZE 1024
 void error_handling(char *msg);
 
+// client to server - Game Info
+typedef struct{
+    int pos;
+    int flag;
+}clnt_data;
 
 int main(int argc, char *argv[]){
     int sock;
