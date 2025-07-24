@@ -84,6 +84,7 @@ void error_handling(char *msg);
 
 char msg[NAME_SIZE];
 int len;
+char name_msg[NAME_SIZE + BUF_SIZE] = "";
 
 typedef struct
 {
@@ -126,7 +127,9 @@ int main(int argc, char *argv[])
 
     printf("\033[2J");
     gotoxy(1, 1);
+    printf("\033[38;5;2m");
     printf("Search word: ");
+    printf("\033[0m");
     gotoxy(1, 2);
     printf("--------------------------\n");
     fflush(stdout);
@@ -149,39 +152,49 @@ void *send_msg(void *arg)
     int sock = *((int *)arg);
     int str_len;
     int m;
-    char name_msg[NAME_SIZE + BUF_SIZE];
     while (1)
     {
-        printf("\033[2J");
-        gotoxy(1, 1);
-        printf("Search word: ");
-        gotoxy(1, 2);
-        printf("--------------------------\n");
+        pthread_mutex_lock(&display_mutex);
+        gotoxy(13 + len, 1);
         fflush(stdout);
+        pthread_mutex_unlock(&display_mutex);
 
-        gotoxy(13, 1);
-        printf("%s", name_msg);
-        fflush(stdout);
         m = getch();
 
         if (m == 127)
         {
-            if(len <= 0) continue;
+            if (len < 1)
+            {
+                name_msg[1] = '\0';
+                for (int i = 0; i < 10; i++)
+                {
+                    gotoxy(1, 3 + i);
+                    printf("\033[2K");
+                    fflush(stdout);
+                }
+                continue;
+            }
             len--;
             name_msg[len] = '\0';
 
+            pthread_mutex_lock(&display_mutex);
             gotoxy(13 + len, 1);
             printf(" ");
             fflush(stdout);
+            gotoxy(13 + len, 1);
+            fflush(stdout);
+            pthread_mutex_unlock(&display_mutex);
         }
         else
         {
             name_msg[len++] = m;
             name_msg[len] = '\0';
 
-            gotoxy(13 + len, 1);
+            pthread_mutex_lock(&display_mutex);
+            gotoxy(13, 1);
+            printf("%s", name_msg);
             fflush(stdout);
-            sleep(1);
+            pthread_mutex_unlock(&display_mutex);
         }
 
         if (!strcmp(name_msg, "q\n"))
@@ -204,11 +217,15 @@ void *recv_data(void *arg)
     char data_msg[DATA_SIZE + BUF_SIZE];
     int str_len;
     int count;
+    char *ptr;
+    int index;
 
-    char list[NAME_SIZE];
+    char list[BUF_SIZE];
     while (1)
     {
         read(sock, &count, sizeof(int));
+
+        pthread_mutex_lock(&display_mutex);
         for (int i = 0; i < 10; i++)
         {
             gotoxy(1, 3 + i);
@@ -226,12 +243,34 @@ void *recv_data(void *arg)
             list[str_len] = '\0';
 
             gotoxy(1, 3 + i);
-            printf("%s\n", list);
-            fflush(stdout);
 
-            gotoxy(13 + len, 1);
-            fflush(stdout);
+            int j;
+
+            if ((ptr = strstr(list, name_msg)) != NULL)
+            {
+                index = ptr - list;
+
+                for (int k = 0; k < index; k++)
+                {
+                    printf("%c", list[k]);
+                }
+
+                for (int k = index; k < index + strlen(name_msg); k++)
+                {
+                    printf("\033[38;5;3m");
+                    printf("%c", list[k]);
+                    printf("\033[0m");
+                }
+
+                for (int k = index + strlen(name_msg); k < str_len; k++)
+                {
+                    printf("%c", list[k]);
+                }
+            }
         }
+        // gotoxy(13, 1);
+        fflush(stdout);
+        pthread_mutex_unlock(&display_mutex);
     }
     return NULL;
 }
