@@ -145,7 +145,8 @@ void *handle_clnt(void *arg)
         read(clnt_sock, &str_len, sizeof(int));
         read(clnt_sock, msg, str_len);
 
-        msg[str_len-1] = '\0';
+        msg[str_len] = '\0';
+        msg[strcspn(msg, "\n\r")] = '\0'; 
         printf("recv msg: %s\n", msg);
 
         int count = 0;
@@ -154,12 +155,12 @@ void *handle_clnt(void *arg)
         {
             if (strstr(serv_cnt[i].data_info.data_name, msg) != NULL)
             {
-                printf("test\n");
+                // printf("test\n");
                 search_list[count++] = serv_cnt[i];
             }
         }
 
-        printf("count: %d\n", count);
+        // printf("count: %d\n", count);
         if(count > 10) count = 10;
         write(clnt_sock, &count, sizeof(int));
 
