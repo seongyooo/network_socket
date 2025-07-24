@@ -19,18 +19,20 @@
 #define NAME_SIZE 30
 #define DATA_SIZE 1024
 
+pthread_mutex_t display_mutex;
+
 void gotoxy(int x, int y)
 {
     printf("%c[%d;%df", 0x1B, y, x);
 }
 
-void clear_lines(int start_line, int count)
+void clrscr()
 {
-    for(int i = 0; i < count; i++) {
-        gotoxy(1, start_line + i);
-        printf("\033[K"); // 현재 커서 위치부터 줄 끝까지 지우기
+    for (int i = 0; i < 10; i++)
+    {
+        fprintf(stdout, "\033[2K");
+        fflush(stdout);
     }
-    fflush(stdout);
 }
 
 int getch()
@@ -40,7 +42,7 @@ int getch()
 
     tcgetattr(STDIN_FILENO, &oldattr);
     newattr = oldattr;
-    newattr.c_lflag &= ~(ICANON | ECHO);
+    newattr.c_lflag &= ~(ICANON);
     newattr.c_cc[VMIN] = 1;
     newattr.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
@@ -81,6 +83,7 @@ void *send_msg(void *arg);
 void error_handling(char *msg);
 
 char msg[NAME_SIZE];
+int len;
 
 typedef struct
 {
@@ -90,22 +93,10 @@ typedef struct
 
 int main(int argc, char *argv[])
 {
-    /* int i;
-    char msg[BUF_SIZE];
-
-    // 엔터를 코드상에서 입력하게 해서, 계속 msg 값을 터미널 상에서 출력하도록 하는 것.
-    // 아니면 터미널에서 엔터 입력 없이도, 문자열만 쳐도, 계속 저장이 되도록
-    fputs("Search word: ", stdout);
-    while(1){
-        fgets(msg, BUF_SIZE, stdin);
-        msg[strlen(msg)]='\n';
-        printf ("\x1B[%ld;%dH", strlen(msg)+15, -1);
-        fflush(stdout);
-        sleep(1);
-    } */
-
     int sock;
     struct sockaddr_in serv_addr;
+
+    pthread_mutex_init(&display_mutex, NULL);
 
     void *thread_return;
 
@@ -132,13 +123,6 @@ int main(int argc, char *argv[])
     }
 
     pthread_t snd_thread, rcv_thread;
-    /* while (1)
-    {
-        pthread_create(&snd_thread, NULL, send_msg, (void *)&sock);
-        pthread_create(&rcv_thread, NULL, recv_data, (void *)&sock);
-        pthread_detach(snd_thread);
-        pthread_detach(rcv_thread);
-    } */
 
     printf("\033[2J");
     gotoxy(1, 1);
@@ -164,21 +148,41 @@ void *send_msg(void *arg)
 {
     int sock = *((int *)arg);
     int str_len;
-    int len = 0;
     int m;
     char name_msg[NAME_SIZE + BUF_SIZE];
     while (1)
     {
+        printf("\033[2J");
+        gotoxy(1, 1);
+        printf("Search word: ");
+        gotoxy(1, 2);
+        printf("--------------------------\n");
+        fflush(stdout);
 
-        gotoxy(13 + len, 1);
+        gotoxy(13, 1);
+        printf("%s", name_msg);
         fflush(stdout);
         m = getch();
 
-        name_msg[len++] = m;
-        name_msg[len] = '\0';
+        if (m == 127)
+        {
+            if(len <= 0) continue;
+            len--;
+            name_msg[len] = '\0';
 
-        gotoxy(13+len, 1);
-        fflush(stdout);
+            gotoxy(13 + len, 1);
+            printf(" ");
+            fflush(stdout);
+        }
+        else
+        {
+            name_msg[len++] = m;
+            name_msg[len] = '\0';
+
+            gotoxy(13 + len, 1);
+            fflush(stdout);
+            sleep(1);
+        }
 
         if (!strcmp(name_msg, "q\n"))
         {
@@ -199,23 +203,35 @@ void *recv_data(void *arg)
     int sock = *((int *)arg);
     char data_msg[DATA_SIZE + BUF_SIZE];
     int str_len;
+    int count;
 
     char list[NAME_SIZE];
-
-    int total = 0;
-    for (int i = 0; i < 10; i++)
+    while (1)
     {
-        clear_lines(3, 10);
+        read(sock, &count, sizeof(int));
+        for (int i = 0; i < 10; i++)
+        {
+            gotoxy(1, 3 + i);
+            printf("\033[2K");
+            fflush(stdout);
+        }
 
-        read(sock, &str_len, sizeof(int));
-        read(sock, list, str_len);
+        int total = 0;
+        for (int i = 0; i < count; i++)
+        {
 
-        list[str_len] = '\0';
+            read(sock, &str_len, sizeof(int));
+            read(sock, list, str_len);
 
-        gotoxy(1, 3 + i);
-        printf("%s\n", list);
-        fflush(stdout);
+            list[str_len] = '\0';
+
+            gotoxy(1, 3 + i);
+            printf("%s\n", list);
+            fflush(stdout);
+
+            gotoxy(13 + len, 1);
+            fflush(stdout);
+        }
     }
-
     return NULL;
 }
