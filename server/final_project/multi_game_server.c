@@ -19,11 +19,12 @@ typedef struct{
     int player_cnt;
     int player_id;
 
-    int grid_size;
+    int *grid_size;
     int panel_cnt;
     int panel_pos[BUF_SIZE]; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
     int game_time;
-}clnt_init;
+    
+}client_init;
 
 // Game Info
 typedef struct{

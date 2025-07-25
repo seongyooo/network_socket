@@ -89,7 +89,6 @@ int main(int argc, char *argv[])
         error_handling("connect() error");
     }
 
-    // 초기정보 받기
     read(t_sock, &clnt_init, sizeof(client_init));
     printf("game init ID: %d\n", clnt_init.player_id);
 
@@ -135,7 +134,6 @@ int main(int argc, char *argv[])
         printf("%d: recv_flag: %d\n", u_sock, g_data.flag);
     }
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
-    // main에서 받자마자 바로 출력해버릴까??
 
     pthread_join(send_thread, &thread_return);
 
@@ -177,7 +175,7 @@ void *send_data(void *arg)
             pthread_mutex_lock(&mutx);
             clnt_data.flag = g_data.flag;
             write(sock, &clnt_data, sizeof(client_data));
-            printf("%d: send_flag: %d\n", sock, clnt_data.flag);
+            printf("%d: flag: %d\n", sock, clnt_data.flag);
             pthread_mutex_unlock(&mutx);
         }
     }
