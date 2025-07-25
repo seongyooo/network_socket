@@ -26,8 +26,6 @@ void *handle_clnt(void *arg);
 // Initialize
 typedef struct
 {
-    // int flag; // 현재 보내진 데이터 패킷이 어떤 데이터인지 flag가 정확히 뭐를 의미하는지?
-
     int player_cnt;
     int player_id;
     int grid_num;
@@ -45,14 +43,21 @@ typedef struct
     int flag;       // 데이터가 어떤 event를 발생시켰는지 판단(이동, 뒤집기)
     int panel_data; // 판의 대한 정보만 보내도 된다. 이미 초기값을 통해, 전체 grid 정보는 넘어갔으니
     int player_pos[BUF_SIZE];
-    int left_time;
 } game_data;
 
 typedef struct
 {
+    int player_id;
     int pos;
     int flag;
 } client_data;
+
+typedef struct{
+    int grid[100*100+1];
+    int same_cnt;
+    int left_time;
+    client_data clnt_data[MAX_CLNT];
+}game_information;
 
 // Game Over
 typedef struct
@@ -67,8 +72,8 @@ struct sockaddr_in serv_adr, send_adr, recv_adr, clnt_adr;
 
 client_init clnt_init;
 game_data g_data;
-client_data clnt_data;
 game_result g_result;
+game_information game_info;
 
 int clnt_socks[MAX_CLNT];
 int clnt_cnt = 0;
@@ -131,14 +136,19 @@ int main(int argc, char *argv[])
     clnt_init.player_id = 0;
     grid_size = (int *)malloc(sizeof(int) * gird_num);
     memset(grid_size, -1, gird_num * sizeof(int)); // -1로 초기화
+
     clnt_init.panel_cnt = atoi(argv[3]);
     panel_pos = (int *)malloc(sizeof(int) * clnt_init.panel_cnt);
     clnt_init.game_time = atoi(argv[4]);
 
+    // game 상태 초기화
+    game_info.same_cnt = 0;
+    game_info.left_time = 30;
+    
     // 난수로 panel 위치 할당
     int random = 0;
     for (int i = 0; i < clnt_init.panel_cnt; i++)
-    { 
+    {
         random = (rand() % gird_num);
         panel_pos[i] = random; // panel_pos에는 해당 숫자만 담김
 
@@ -153,20 +163,23 @@ int main(int argc, char *argv[])
             printf("Red check: %d\n", random);
             grid_size[random] = 0;
         }
-        else if((i%2) == 1) // 파랑색
+        else if ((i % 2) == 1) // 파랑색
         {
             printf("Blue check: %d\n", random);
             grid_size[random] = 1;
         }
     }
 
-    for(int i=0; i<clnt_init.grid_num * clnt_init.grid_num; i++){
-        printf("%d, ", grid_size[i]);
+    //game_info.grid = grid_size;
+    memcpy(game_info.grid, grid_size, gird_num * sizeof(int));
+    for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+    {
+        printf("%d, ",game_info.grid[i]);
     }
     printf("\n");
 
     // client init
-    clnt_data.flag = 0;
+    // clnt_data.flag = 0;
 
     pthread_t t_id, send_thread;
 
@@ -241,10 +254,8 @@ int main(int argc, char *argv[])
     int count = 0;
     while (1)
     {
-        g_data.flag = count++;
-        sleep(1); // 일정주기만큼 보낼것인가? while문마다 보낼 것인가?
-        // printf("%d: send_flag: %d\n", u_serv_sock, clnt_data.flag);
-        sendto(u_serv_sock, &g_data, sizeof(game_data), 0, (struct sockaddr *)&send_adr, sizeof(send_adr));
+        // sleep(1); // 일정주기만큼 보낼것인가? while문마다 보낼 것인가?
+        sendto(u_serv_sock, &game_info, sizeof(game_information), 0, (struct sockaddr *)&send_adr, sizeof(send_adr));
     }
 
     // ptread 생성
@@ -301,17 +312,17 @@ void *handle_clnt(void *arg)
     player_data.flag = 0;
 
     // grid 동적할당을 위해서 사이즈 먼저 보내서 할당
-    int grid_num =clnt_init.grid_num*clnt_init.grid_num;
+    int grid_num = clnt_init.grid_num * clnt_init.grid_num;
     printf("grid_num: %d\n", grid_num);
     write(clnt_sock, &grid_num, sizeof(int));
-    write(clnt_sock, grid_size, sizeof(int)*grid_num);
+    write(clnt_sock, grid_size, sizeof(int) * grid_num);
 
     write(clnt_sock, &clnt_init, sizeof(client_init));
 
     while (1)
     {
         // printf("test2: %d\n", test);
-        sleep(2);
+        sleep(1);
         if (test)
         {
             write(clnt_sock, &start, sizeof(start)); // 예외처리같은거 x 무조건 어떤 시작값을 보내면 되기에.
@@ -326,20 +337,23 @@ void *handle_clnt(void *arg)
         if (str_len <= 0)
             break;
 
-        clnt_data = player_data; // 이런식으로 받은 데이터를 처리해서 clnt_data에 저장(mutex 필요)
+        if(player_data.player_id < 1){
+            error_handling("index error");
+        }
+        pthread_mutex_lock(&mutx);
+        game_info.clnt_data[player_data.player_id-1].player_id = player_data.player_id;
+        game_info.clnt_data[player_data.player_id-1].pos = player_data.pos;
+        
+        if(player_data.flag == 5){
+            for(int i=0; i<clnt_init.panel_cnt; i++){
+                if(panel_pos[i] == player_data.pos)
+                    game_info.grid[player_data.pos] = !game_info.grid[player_data.pos];; // 반전 0->1, 1->0
+            }
+        }
+        pthread_mutex_unlock(&mutx);
+        // (mutex 필요)
         // printf("%d: recv_flag: %d\n", clnt_sock, player_data.flag);
     }
-
-    // 이 스레드를 종료시키지 말고 각 클라이언트로부터 데이터를 받아들이는 스레드 함수로 발전시키면 어떨까?
-    // 즉, 게임 중반 데이터들을 계속 받는 스레드로 전환, 아니면 이 스레드는 tcp니깐, 초기정보 + 종료정보만 포함
-    // 각 클라이언트로부터 계속 값을 받는거임.
-
-    // 근데 여기에는 tcp로만 했던 sock 정보만 있으므로 udp 소켓은 따로 함수를 만들어서 관리해야함
-    // 그럼 클라이언트 측에서 보낸 udp 패킷이 어떤 스레드 패킷인지는 어떻게 아느냐?
-    // if(player_id)
-
-    // recvfrom() 하고 그 구조체 데이터를 여기서 바로 업데이트 시키면, 전역 구조체에서 값이 변경되서
-    // sendto()로 보낼 수 있나? -> 뮤텍스로 보호!
 
     return NULL;
 }
