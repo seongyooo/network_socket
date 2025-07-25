@@ -30,12 +30,14 @@ typedef struct
 
     int player_cnt;
     int player_id;
-    int *grid_size;
+    int grid_num;
     int panel_cnt;
-    int panel_pos[BUF_SIZE]; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
     int game_time;
 
 } client_init;
+
+int *grid_size;
+int *panel_pos; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
 
 // Game Info
 typedef struct
@@ -120,14 +122,48 @@ int main(int argc, char *argv[])
     // init 데이터 처리
     // 나중에 grid 배열 0,1 값 난수로 넣기
     // 세팅을 한번에 해서 보내는게 좋을 것 같음.
-    int gird_size = atoi(argv[2]) * atoi(argv[2]);
+    srand((unsigned)time(NULL));
+
+    int gird_num = atoi(argv[2]) * atoi(argv[2]);
+    clnt_init.grid_num = atoi(argv[2]);
 
     clnt_init.player_cnt = atoi(argv[1]);
     clnt_init.player_id = 0;
-    clnt_init.grid_size = (int *)malloc(sizeof(int) * gird_size);
-    memset(clnt_init.grid_size, -1, gird_size * sizeof(int)); // -1로 초기화
+    grid_size = (int *)malloc(sizeof(int) * gird_num);
+    memset(grid_size, -1, gird_num * sizeof(int)); // -1로 초기화
     clnt_init.panel_cnt = atoi(argv[3]);
+    panel_pos = (int *)malloc(sizeof(int) * clnt_init.panel_cnt);
     clnt_init.game_time = atoi(argv[4]);
+
+    // 난수로 panel 위치 할당
+    int random = 0;
+    for (int i = 0; i < clnt_init.panel_cnt; i++)
+    { 
+        random = (rand() % gird_num);
+        panel_pos[i] = random; // panel_pos에는 해당 숫자만 담김
+
+        for (int j = 0; j < i; j++)
+        {
+            if (panel_pos[i] == panel_pos[j])
+                i--;
+        }
+
+        if ((i % 2) == 0) // 빨간색
+        {
+            printf("Red check: %d\n", random);
+            grid_size[random] = 0;
+        }
+        else if((i%2) == 1) // 파랑색
+        {
+            printf("Blue check: %d\n", random);
+            grid_size[random] = 1;
+        }
+    }
+
+    for(int i=0; i<clnt_init.grid_num * clnt_init.grid_num; i++){
+        printf("%d, ", grid_size[i]);
+    }
+    printf("\n");
 
     // client init
     clnt_data.flag = 0;
@@ -145,6 +181,7 @@ int main(int argc, char *argv[])
         clnt_init.player_id = clnt_cnt;
         pthread_mutex_unlock(&mutx);
 
+        // 스레드 만들자마자 바로 init를 보내기 때문에 그 전에 처리해서 보내야 한다.
         pthread_create(&t_id, NULL, handle_clnt, (void *)&clnt_sock);
         printf("Connected client: %d \n", clnt_sock);
 
@@ -162,7 +199,7 @@ int main(int argc, char *argv[])
     // 나중에 시간 설정해서 해당 시간 설정 끝나면 main thread 종료되게
     while (1)
     {
-        printf("test1: %d\n", test);
+        // printf("test1: %d\n", test);
         sleep(2);
         if (test == 0)
         {
@@ -172,7 +209,8 @@ int main(int argc, char *argv[])
         // clnt_data.flag는 또다른 배열이나 로직을 만들어서 각 클라이언트로부터 받은 flag를 처리
         // if(clnt_data.flag == 9) break;
 
-        if(test == 1) break;
+        if (test == 1)
+            break;
     }
 
     // udp socket 생성
@@ -200,17 +238,14 @@ int main(int argc, char *argv[])
     } game_data; */
 
     // 시간 종료되면 종료
-    int count=0;
-    while(1){
+    int count = 0;
+    while (1)
+    {
         g_data.flag = count++;
         sleep(1); // 일정주기만큼 보낼것인가? while문마다 보낼 것인가?
-        printf("%d: send_flag: %d\n", u_serv_sock, clnt_data.flag);
-        sendto(u_serv_sock, &g_data, sizeof(game_data), 0, (struct sockaddr*)&send_adr, sizeof(send_adr));
-        
+        // printf("%d: send_flag: %d\n", u_serv_sock, clnt_data.flag);
+        sendto(u_serv_sock, &g_data, sizeof(game_data), 0, (struct sockaddr *)&send_adr, sizeof(send_adr));
     }
-
-
-
 
     // ptread 생성
     void *thread_return;
@@ -265,11 +300,17 @@ void *handle_clnt(void *arg)
     client_data player_data;
     player_data.flag = 0;
 
+    // grid 동적할당을 위해서 사이즈 먼저 보내서 할당
+    int grid_num =clnt_init.grid_num*clnt_init.grid_num;
+    printf("grid_num: %d\n", grid_num);
+    write(clnt_sock, &grid_num, sizeof(int));
+    write(clnt_sock, grid_size, sizeof(int)*grid_num);
+
     write(clnt_sock, &clnt_init, sizeof(client_init));
 
     while (1)
     {
-        printf("test2: %d\n", test);
+        // printf("test2: %d\n", test);
         sleep(2);
         if (test)
         {
@@ -278,14 +319,15 @@ void *handle_clnt(void *arg)
         }
     }
 
-    while(1){
+    while (1)
+    {
         str_len = read(clnt_sock, &player_data, sizeof(client_data));
 
         if (str_len <= 0)
             break;
 
         clnt_data = player_data; // 이런식으로 받은 데이터를 처리해서 clnt_data에 저장(mutex 필요)
-        printf("%d: recv_flag: %d\n", clnt_sock, player_data.flag);
+        // printf("%d: recv_flag: %d\n", clnt_sock, player_data.flag);
     }
 
     // 이 스레드를 종료시키지 말고 각 클라이언트로부터 데이터를 받아들이는 스레드 함수로 발전시키면 어떨까?
