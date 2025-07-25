@@ -6,21 +6,24 @@
 #include <sys/socket.h>
 #include <pthread.h>
 #include <netinet/in.h>
+#include <termios.h>
+#include <fcntl.h>
 
 #define BUF_SIZE 1024
 #define SERV_IP "203.252.112.31"
+#define MAX_CLNT 256
 
 pthread_mutex_t mutx;
 
 void *recv_data(void *arg);
 void *send_data(void *arg);
+void *screen_data();
+void *screen_print();
 void error_handling(char *msg);
 
 // Initialize
 typedef struct
 {
-    // int flag; // 현재 보내진 데이터 패킷이 어떤 데이터인지 flag가 정확히 뭐를 의미하는지?
-
     int player_cnt;
     int player_id;
     int grid_num;
@@ -35,6 +38,7 @@ int *panel_pos; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) 
 // client to server - Game Info
 typedef struct
 {
+    int player_id;
     int pos;
     int flag;
 } client_data;
@@ -47,11 +51,63 @@ typedef struct
     int left_time;
 } game_data;
 
+typedef struct
+{
+    int grid[100 * 100 + 1];
+    int same_cnt;
+    client_data clnt_data[MAX_CLNT];
+    int left_time;
+} game_information;
+
 client_init clnt_init;
 client_data clnt_data;
 game_data g_data;
+game_information game_info;
 
 int start;
+
+int getch()
+{
+    int c = 0;
+    struct termios oldattr, newattr;
+
+    tcgetattr(STDIN_FILENO, &oldattr);
+    newattr = oldattr;
+    newattr.c_lflag &= ~(ICANON | ECHO);
+    newattr.c_cc[VMIN] = 1;
+    newattr.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
+    c = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);
+
+    return c;
+}
+
+int kbhit(void)
+{
+    struct termios oldt, newt;
+    int ch = 0;
+    int oldf = 0;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+
+    ch = getch();
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+    if (ch != EOF)
+    {
+        ungetc(ch, stdin);
+        return 1;
+    }
+
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -92,7 +148,6 @@ int main(int argc, char *argv[])
         error_handling("connect() error");
     }
 
-
     // 초기정보 받기
     int grid_num;
     read(t_sock, &grid_num, sizeof(int));
@@ -105,16 +160,18 @@ int main(int argc, char *argv[])
     printf("-----------------------------\n");
     printf("Player count: %d\n", clnt_init.player_cnt);
     printf("Game init ID: %d\n", clnt_init.player_id);
+    clnt_data.player_id = clnt_init.player_id;
     printf("Grid size num: %d\n", clnt_init.grid_num);
     // printf("Panel pos: %d\n", clnt_init.panel_pos[0]);
-    for(int i=0; i<clnt_init.grid_num * clnt_init.grid_num; i++){
+    for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+    {
         printf("%d, ", grid_size[i]);
     }
     printf("\n");
     printf("Time: %d\n", clnt_init.game_time);
     printf("-----------------------------\n");
 
-    pthread_t send_thread, recv_thread;
+    pthread_t send_thread, screen_thread, sceen_print_thread;
     void *thread_return;
     pthread_create(&send_thread, NULL, send_data, (void *)&t_sock);
 
@@ -151,14 +208,23 @@ int main(int argc, char *argv[])
 
     setsockopt(u_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
 
-    while(1){
-        recvfrom(u_sock, &g_data, sizeof(game_data), 0, NULL, 0);
+    pthread_create(&sceen_print_thread, NULL, screen_print, NULL);
+    // 키보드 입력값 계속 받는 스레드
+    pthread_create(&screen_thread, NULL, screen_data, NULL);
+
+    while (1)
+    {
+        pthread_mutex_lock(&mutx);
+        recvfrom(u_sock, &game_info, sizeof(game_information), 0, NULL, 0);
+        pthread_mutex_unlock(&mutx);
         // printf("%d: recv_flag: %d\n", u_sock, g_data.flag);
     }
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
     // main에서 받자마자 바로 출력해버릴까??
 
     pthread_join(send_thread, &thread_return);
+    pthread_join(screen_thread, &thread_return);
+    pthread_join(sceen_print_thread, &thread_return);
 
     close(t_sock);
     close(u_sock);
@@ -196,12 +262,116 @@ void *send_data(void *arg)
         {
             sleep(1);
             pthread_mutex_lock(&mutx);
-            clnt_data.flag = g_data.flag;
             write(sock, &clnt_data, sizeof(client_data));
             // printf("%d: send_flag: %d\n", sock, clnt_data.flag);
             pthread_mutex_unlock(&mutx);
         }
     }
 
+    return NULL;
+}
+
+void *screen_print()
+{
+
+    while (1)
+    {
+        printf("\033[H\033[J");
+        usleep(50000);
+        // 여기다가 터미널의 출력하는 로직을 만듬. 일단 데이터가 제대로 출력되는지 테스트
+        pthread_mutex_lock(&mutx);
+        printf("time: %d\n", game_info.left_time);
+        for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+        {
+            if ((i + 1) % clnt_init.grid_num == 0)
+                printf("\n");
+            printf("%d ", game_info.grid[i]);
+        }
+
+        printf("------------------------------\n\n");
+        for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+        {
+            if ((i + 1) % clnt_init.grid_num == 0)
+                printf("\n");
+
+            for (int j = 0; j < clnt_init.player_cnt; j++)
+            {
+                if (i == game_info.clnt_data[j].pos)
+                {
+                    printf("%d ", game_info.clnt_data[j].player_id);
+                    continue;
+                }
+            }
+
+            printf("%d ", game_info.grid[i]);
+        }
+        pthread_mutex_unlock(&mutx);
+    }
+    return NULL;
+}
+
+void *screen_data()
+{
+    int ch;
+    int standard = clnt_init.grid_num;
+    ch = getch();
+
+    clnt_data.pos = 0;
+    while (1)
+    {
+        if (kbhit())
+        {
+            ch = getch();
+
+            pthread_mutex_lock(&mutx);
+            if (ch == '[')
+            {
+                ch = getch();
+                if (ch == 'A')
+                {
+                    printf("up\n");
+                    if (clnt_data.pos - standard >= 0)
+                    {
+                        clnt_data.pos -= standard;
+                    }
+                }
+                else if (ch == 'C')
+                {
+                    printf("right\n");
+                    if ((clnt_data.pos + 1) % standard != 0)
+                    {
+                        clnt_data.pos++;
+                    }
+                }
+                else if (ch == 'B')
+                {
+                    printf("down\n");
+                    if (clnt_data.pos + standard < standard * standard)
+                    {
+                        clnt_data.pos += standard;
+                    }
+                }
+                else if (ch == 'D')
+                {
+                    printf("left\n");
+                    if ((clnt_data.pos) % standard != 0)
+                    {
+                        clnt_data.pos--;
+                    }
+                }
+                else if (ch == '\r')
+                {
+                    printf("Enter\n");
+                    clnt_data.flag = 5;
+                }
+                else
+                {
+                    printf("Nono\n");
+                }
+            }
+            pthread_mutex_unlock(&mutx);
+        }
+        usleep(10000);
+    }
     return NULL;
 }

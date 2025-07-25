@@ -5,6 +5,9 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include<unistd.h>
+#include<termios.h>
+
 
 #define BUF_SIZE 100
 #define MAX_CLNT 256
@@ -18,6 +21,23 @@ void error_handling(char * msg);
 int clnt_cnt=0;
 int clnt_socks[MAX_CLNT];
 pthread_mutex_t mutx;
+
+int getch()
+{
+    int c = 0;
+    struct termios oldattr, newattr;
+
+    tcgetattr(STDIN_FILENO, &oldattr);
+    newattr = oldattr;
+    newattr.c_lflag &= ~(ICANON);
+    newattr.c_cc[VMIN] = 1;
+    newattr.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
+    c = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);
+
+    return c;
+}
 
 int main(int argc, char *argv[])
 {
