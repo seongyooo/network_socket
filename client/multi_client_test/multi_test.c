@@ -16,18 +16,21 @@ void *recv_data(void *arg);
 void *send_data(void *arg);
 void error_handling(char *msg);
 
+// Initialize
 typedef struct
 {
     // int flag; // 현재 보내진 데이터 패킷이 어떤 데이터인지 flag가 정확히 뭐를 의미하는지?
 
     int player_cnt;
     int player_id;
-    int *grid_size;
+    int grid_num;
     int panel_cnt;
-    int panel_pos[BUF_SIZE]; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
     int game_time;
 
 } client_init;
+
+int *grid_size;
+int *panel_pos; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
 
 // client to server - Game Info
 typedef struct
@@ -89,8 +92,27 @@ int main(int argc, char *argv[])
         error_handling("connect() error");
     }
 
+
+    // 초기정보 받기
+    int grid_num;
+    read(t_sock, &grid_num, sizeof(int));
+    grid_size = (int *)malloc(sizeof(int) * grid_num);
+
+    read(t_sock, grid_size, sizeof(int) * grid_num);
+
     read(t_sock, &clnt_init, sizeof(client_init));
-    printf("game init ID: %d\n", clnt_init.player_id);
+
+    printf("-----------------------------\n");
+    printf("Player count: %d\n", clnt_init.player_cnt);
+    printf("Game init ID: %d\n", clnt_init.player_id);
+    printf("Grid size num: %d\n", clnt_init.grid_num);
+    // printf("Panel pos: %d\n", clnt_init.panel_pos[0]);
+    for(int i=0; i<clnt_init.grid_num * clnt_init.grid_num; i++){
+        printf("%d, ", grid_size[i]);
+    }
+    printf("\n");
+    printf("Time: %d\n", clnt_init.game_time);
+    printf("-----------------------------\n");
 
     pthread_t send_thread, recv_thread;
     void *thread_return;
@@ -131,9 +153,10 @@ int main(int argc, char *argv[])
 
     while(1){
         recvfrom(u_sock, &g_data, sizeof(game_data), 0, NULL, 0);
-        printf("%d: recv_flag: %d\n", u_sock, g_data.flag);
+        // printf("%d: recv_flag: %d\n", u_sock, g_data.flag);
     }
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
+    // main에서 받자마자 바로 출력해버릴까??
 
     pthread_join(send_thread, &thread_return);
 
@@ -175,7 +198,7 @@ void *send_data(void *arg)
             pthread_mutex_lock(&mutx);
             clnt_data.flag = g_data.flag;
             write(sock, &clnt_data, sizeof(client_data));
-            printf("%d: flag: %d\n", sock, clnt_data.flag);
+            // printf("%d: send_flag: %d\n", sock, clnt_data.flag);
             pthread_mutex_unlock(&mutx);
         }
     }
