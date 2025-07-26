@@ -13,10 +13,16 @@
 #define SERV_IP "203.252.112.31"
 #define MAX_CLNT 256
 
+#define RED "\x1b[41m"
+#define BLUE "\x1b[44m"
+#define RESET "\x1b[0m"
+
+#define P_RED "\x1b[31m"
+#define P_BLUE "\x1b[34m"
+
 pthread_mutex_t mutx;
 
 void *recv_data(void *arg);
-void *send_data(void *arg);
 void *screen_data();
 void *screen_print();
 void error_handling(char *msg);
@@ -33,7 +39,7 @@ typedef struct
 } client_init;
 
 int *grid_size;
-int *panel_pos; // panel_pos[panel_num] (실제 판의 위치에 대한 정보) num은 어떻게 할당할 것인지?
+int *panel_pos;
 
 // client to server - Game Info
 typedef struct
@@ -45,23 +51,14 @@ typedef struct
 
 typedef struct
 {
-    int flag;       // 데이터가 어떤 event를 발생시켰는지 판단(이동, 뒤집기)
-    int panel_data; // 판의 대한 정보만 보내도 된다. 이미 초기값을 통해, 전체 grid 정보는 넘어갔으니
-    int player_pos[BUF_SIZE];
-    int left_time;
-} game_data;
-
-typedef struct
-{
     int grid[100 * 100 + 1];
     int same_cnt;
-    client_data clnt_data[MAX_CLNT];
     int left_time;
+    client_data clnt_data[MAX_CLNT];
 } game_information;
 
 client_init clnt_init;
 client_data clnt_data;
-game_data g_data;
 game_information game_info;
 
 int start;
@@ -137,7 +134,6 @@ int main(int argc, char *argv[])
     // client init
     clnt_data.flag = 0;
 
-    // sever로 데이터 보내기 위한 것(이것도 마찬가지 tcp, udp 둘다 같이 쓸 수 있을듯)
     memset(&serv_adr, 0, sizeof(serv_adr));
     serv_adr.sin_family = AF_INET;
     serv_adr.sin_addr.s_addr = inet_addr(SERV_IP);
@@ -173,12 +169,11 @@ int main(int argc, char *argv[])
 
     pthread_t send_thread, screen_thread, sceen_print_thread;
     void *thread_return;
-    pthread_create(&send_thread, NULL, send_data, (void *)&t_sock);
+    pthread_create(&screen_thread, NULL, screen_data, (void *)&t_sock);
 
     int count = 0;
     start = 0;
     // 정보를 계속 전달하는 main thread 아니면 보내는 스레드에서 정보를 바로 전달할 것인지
-    // start가 1이 들어오면, send_data 스레드에서 flag값 보내기 시작함.(현재는 test용으로 10개만)
     read(t_sock, &start, sizeof(int));
     printf("start: %d\n", start);
 
@@ -210,13 +205,19 @@ int main(int argc, char *argv[])
 
     pthread_create(&sceen_print_thread, NULL, screen_print, NULL);
     // 키보드 입력값 계속 받는 스레드
-    pthread_create(&screen_thread, NULL, screen_data, NULL);
 
+    game_information temp;
+    int str_len;
     while (1)
     {
-        pthread_mutex_lock(&mutx);
-        recvfrom(u_sock, &game_info, sizeof(game_information), 0, NULL, 0);
-        pthread_mutex_unlock(&mutx);
+        str_len = recvfrom(u_sock, &temp, sizeof(game_information), 0, NULL, 0);
+
+        if (str_len > 0)
+        {
+            pthread_mutex_lock(&mutx);
+            memcpy(&game_info, &temp, sizeof(game_information));
+            pthread_mutex_unlock(&mutx);
+        }
         // printf("%d: recv_flag: %d\n", u_sock, g_data.flag);
     }
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
@@ -237,84 +238,53 @@ void error_handling(char *msg)
     exit(1);
 }
 
-void *recv_data(void *arg)
-{
-    int sock = *((int *)arg);
-
-    /* read(sock, &clnt_init, sizeof(client_init));
-
-    printf("game init ID: %d\n", clnt_init.player_id);
- */
-    // 이후는 이제 게임 중반 데이터들을 계속 받는 스레드로 전환
-
-    return NULL;
-}
-
-void *send_data(void *arg)
-{
-    int sock = *((int *)arg);
-
-    // 계속 보내는 거를 어떻게 구현을 할지 나중에는 저 while문을 time으로 설정.
-
-    while (1)
-    {
-        if (start)
-        {
-            sleep(1);
-            pthread_mutex_lock(&mutx);
-            write(sock, &clnt_data, sizeof(client_data));
-            // printf("%d: send_flag: %d\n", sock, clnt_data.flag);
-            pthread_mutex_unlock(&mutx);
-        }
-    }
-
-    return NULL;
-}
-
 void *screen_print()
 {
-
+    int check;
+    printf("time: %d\n", game_info.left_time);
     while (1)
     {
-        printf("\033[H\033[J");
+        // printf("\033[H\033[J");
         usleep(50000);
         // 여기다가 터미널의 출력하는 로직을 만듬. 일단 데이터가 제대로 출력되는지 테스트
         pthread_mutex_lock(&mutx);
-        printf("time: %d\n", game_info.left_time);
+
+        printf("\n\n------------------------------\n\n");
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
-            if ((i + 1) % clnt_init.grid_num == 0)
-                printf("\n");
-            printf("%d ", game_info.grid[i]);
-        }
-
-        printf("------------------------------\n\n");
-        for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
-        {
-            if ((i + 1) % clnt_init.grid_num == 0)
-                printf("\n");
-
+            check = 1;
             for (int j = 0; j < clnt_init.player_cnt; j++)
             {
                 if (i == game_info.clnt_data[j].pos)
                 {
+                    if(j%2) printf(P_RED);
+                    else printf(P_BLUE);
+    
                     printf("%d ", game_info.clnt_data[j].player_id);
-                    continue;
+                    printf(RESET);
+                    check = 0;
                 }
             }
 
-            printf("%d ", game_info.grid[i]);
+            if (check)
+            {
+                printf("%d ", game_info.grid[i]);
+            }
+
+            if ((i + 1) % clnt_init.grid_num == 0)
+                printf("\n");
         }
         pthread_mutex_unlock(&mutx);
     }
     return NULL;
 }
 
-void *screen_data()
+void *screen_data(void *arg)
 {
+    int sock = *((int *)arg);
     int ch;
     int standard = clnt_init.grid_num;
-    ch = getch();
+    // ch = getch();
 
     clnt_data.pos = 0;
     while (1)
@@ -329,7 +299,7 @@ void *screen_data()
                 ch = getch();
                 if (ch == 'A')
                 {
-                    printf("up\n");
+                    // printf("up\n");
                     if (clnt_data.pos - standard >= 0)
                     {
                         clnt_data.pos -= standard;
@@ -337,7 +307,7 @@ void *screen_data()
                 }
                 else if (ch == 'C')
                 {
-                    printf("right\n");
+                    // printf("right\n");
                     if ((clnt_data.pos + 1) % standard != 0)
                     {
                         clnt_data.pos++;
@@ -345,7 +315,7 @@ void *screen_data()
                 }
                 else if (ch == 'B')
                 {
-                    printf("down\n");
+                    // printf("down\n");
                     if (clnt_data.pos + standard < standard * standard)
                     {
                         clnt_data.pos += standard;
@@ -353,7 +323,7 @@ void *screen_data()
                 }
                 else if (ch == 'D')
                 {
-                    printf("left\n");
+                    // printf("left\n");
                     if ((clnt_data.pos) % standard != 0)
                     {
                         clnt_data.pos--;
@@ -361,15 +331,21 @@ void *screen_data()
                 }
                 else if (ch == '\r')
                 {
-                    printf("Enter\n");
+                    // printf("Enter\n");
                     clnt_data.flag = 5;
                 }
                 else
                 {
-                    printf("Nono\n");
+                    // printf("Nono\n");
                 }
             }
             pthread_mutex_unlock(&mutx);
+            write(sock, &clnt_data, sizeof(client_data));
+
+            if (clnt_data.flag == 5)
+            {
+                clnt_data.flag = 0;
+            }
         }
         usleep(10000);
     }
