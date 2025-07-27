@@ -55,7 +55,7 @@ typedef struct
 typedef struct{
     int grid[100*100+1];
     int same_cnt;
-    int left_time;
+    double left_time;
     client_data clnt_data[MAX_CLNT];
 }game_information;
 
@@ -90,9 +90,12 @@ int main(int argc, char *argv[])
 
     int time_live = TTL;
 
+    struct timeval startTime, endTime;
+    double total;
+
     pthread_mutex_init(&mutx, NULL);
 
-    // ./server 2 10 4 60 1234
+    // ./server 2 8 4 30 1234
     if (argc != 6)
     {
         printf("Usage: %s <player> <grid size> <panel> <time> <port>\n", argv[0]);
@@ -137,7 +140,7 @@ int main(int argc, char *argv[])
     clnt_init.game_time = atoi(argv[4]);
 
     // game 상태 초기화
-    memset(&game_info, 0, sizeof(game_information));
+    memset(&game_info, -1, sizeof(game_information));
     
     // 난수로 panel 위치 할당
     int random = 0;
@@ -155,12 +158,12 @@ int main(int argc, char *argv[])
         if ((i % 2) == 0) // 빨간색
         {
             printf("Red check: %d\n", random);
-            grid_size[random] = 0;
+            game_info.grid[random] = 0;
         }
         else if ((i % 2) == 1) // 파랑색
         {
             printf("Blue check: %d\n", random);
-            grid_size[random] = 1;
+            game_info.grid[random] = 1;
         }
     }
 
@@ -235,11 +238,16 @@ int main(int argc, char *argv[])
 
     setsockopt(u_serv_sock, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&time_live, sizeof(time_live));
 
-
+    gettimeofday(&startTime, NULL);
+    total = startTime.tv_sec + (startTime.tv_usec / 1000000);
     // 시간 종료되면 종료
     int count = 0;
     while (1)
     {
+        gettimeofday(&endTime, NULL);
+        total = ( endTime.tv_sec - startTime.tv_sec ) + (( endTime.tv_usec - startTime.tv_usec ) / 1000000);
+        if(total > clnt_init.game_time) break;
+        game_info.left_time = total;
         // sleep(1); // 일정주기만큼 보낼것인가? while문마다 보낼 것인가?
         sendto(u_serv_sock, &game_info, sizeof(game_information), 0, (struct sockaddr *)&send_adr, sizeof(send_adr));
         usleep(30000);
@@ -302,6 +310,9 @@ void *handle_clnt(void *arg)
     printf("grid_num: %d\n", grid_num);
     write(clnt_sock, &grid_num, sizeof(int));
     write(clnt_sock, grid_size, sizeof(int) * grid_num);
+
+    write(clnt_sock, &clnt_init.panel_cnt, sizeof(int));
+    write(clnt_sock, panel_pos, sizeof(int) * clnt_init.panel_cnt);
 
     write(clnt_sock, &player_init, sizeof(client_init));
 
