@@ -16,6 +16,7 @@
 #define RED "\x1b[41m"
 #define BLUE "\x1b[44m"
 #define RESET "\x1b[0m"
+#define WHITE "\x1b[47m"
 
 #define P_RED "\x1b[31m"
 #define P_BLUE "\x1b[34m"
@@ -53,7 +54,7 @@ typedef struct
 {
     int grid[100 * 100 + 1];
     int same_cnt;
-    int left_time;
+    double left_time;
     client_data clnt_data[MAX_CLNT];
 } game_information;
 
@@ -148,8 +149,12 @@ int main(int argc, char *argv[])
     int grid_num;
     read(t_sock, &grid_num, sizeof(int));
     grid_size = (int *)malloc(sizeof(int) * grid_num);
-
     read(t_sock, grid_size, sizeof(int) * grid_num);
+
+    int panel_num;
+    read(t_sock, &panel_num, sizeof(int));
+    panel_pos = (int *)malloc(sizeof(int) * panel_num);
+    read(t_sock, panel_pos, sizeof(int) * panel_num);
 
     read(t_sock, &clnt_init, sizeof(client_init));
 
@@ -158,7 +163,9 @@ int main(int argc, char *argv[])
     printf("Game init ID: %d\n", clnt_init.player_id);
     clnt_data.player_id = clnt_init.player_id;
     printf("Grid size num: %d\n", clnt_init.grid_num);
-    // printf("Panel pos: %d\n", clnt_init.panel_pos[0]);
+    for(int i=0; i<clnt_init.panel_cnt; i++){
+        printf("Panel pos %d: %d\n", i, panel_pos[i]);
+    }
     for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
     {
         printf("%d, ", grid_size[i]);
@@ -210,6 +217,8 @@ int main(int argc, char *argv[])
     int str_len;
     while (1)
     {
+        if(game_info.left_time >= clnt_init.game_time) break;
+
         str_len = recvfrom(u_sock, &temp, sizeof(game_information), 0, NULL, 0);
 
         if (str_len > 0)
@@ -222,6 +231,20 @@ int main(int argc, char *argv[])
     }
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
     // main에서 받자마자 바로 출력해버릴까??
+
+    int result=0;
+    for(int i=0; i<clnt_init.panel_cnt; i++){
+        if(game_info.grid[panel_pos[i]] == 0) result++;
+    }
+
+    if((result - clnt_init.panel_cnt/2) == 0){
+        printf("Draw!\n");
+    }else if((result - clnt_init.panel_cnt/2) > 0){
+        printf("Winner: Red!\n");
+    }
+    else{
+        printf("Winner: Blue!\n");
+    }
 
     pthread_join(send_thread, &thread_return);
     pthread_join(screen_thread, &thread_return);
@@ -241,34 +264,91 @@ void error_handling(char *msg)
 void *screen_print()
 {
     int check;
-    printf("time: %d\n", game_info.left_time);
+    int same = 0;
+    int red_cnt = clnt_init.panel_cnt / 2;
+    int blue_cnt = clnt_init.panel_cnt / 2;
+    // printf("time: %d\n", game_info.left_time);
     while (1)
     {
-        // printf("\033[H\033[J");
-        usleep(50000);
+        printf("\033[H\033[J");
+        usleep(6000);
         // 여기다가 터미널의 출력하는 로직을 만듬. 일단 데이터가 제대로 출력되는지 테스트
         pthread_mutex_lock(&mutx);
-
-        printf("\n\n------------------------------\n\n");
+        printf("Time: %f\n", game_info.left_time);
+        printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
+        printf("\n------------------------------\n\n");
+        red_cnt=clnt_init.panel_cnt / 2;
+        blue_cnt=clnt_init.panel_cnt / 2;
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
             check = 1;
+            same = 1;
             for (int j = 0; j < clnt_init.player_cnt; j++)
             {
                 if (i == game_info.clnt_data[j].pos)
                 {
-                    if(j%2) printf(P_RED);
-                    else printf(P_BLUE);
-    
-                    printf("%d ", game_info.clnt_data[j].player_id);
+                    if (j % 2)
+                    {
+                        printf(P_RED);
+                    }
+                    else
+                    {
+                        printf(P_BLUE);
+                    }
+
+                    // 플레이어가 겹치는 경우 일단은 두명만 3명 초과는 무시(나중에 로직 추가)
+                    /* if ((j != (clnt_init.player_id - 1)) && (game_info.clnt_data[j].pos == game_info.clnt_data[clnt_init.player_id - 1].pos))
+                    {
+                        printf(WHITE);
+                        printf(" %d%d", game_info.clnt_data[clnt_init.player_id - 1].player_id, game_info.clnt_data[j].player_id);
+                        printf(RESET);
+                        same=0;
+                    }
+                    else
+                    {
+                        printf(WHITE);
+                        printf(" %d ", game_info.clnt_data[j].player_id);
+                        printf(RESET);
+                    } */
+                    printf(WHITE);
+                    printf(" %d ", game_info.clnt_data[j].player_id);
                     printf(RESET);
+
                     check = 0;
                 }
             }
 
             if (check)
             {
-                printf("%d ", game_info.grid[i]);
+                if (game_info.grid[i] == -1)
+                { // 배경 흰색
+                    printf(WHITE);
+                    printf("   ");
+                    printf(RESET);
+                }
+                else if (game_info.grid[i] == 0)
+                {
+                    printf(RED);
+                    printf("   ");
+                    printf(RESET);
+                }
+                else if (game_info.grid[i] == 1)
+                {
+                    printf(BLUE);
+                    printf("   ");
+                    printf(RESET);
+                }
+
+                // 이 화면에 나오는 vs 로직은 나중에 처리
+                if(game_info.grid[i] == 0){
+                    red_cnt++;
+                    blue_cnt--;
+                }
+
+                if(game_info.grid[i] == 1){
+                    red_cnt--;
+                    blue_cnt++;
+                }
             }
 
             if ((i + 1) % clnt_init.grid_num == 0)
@@ -329,15 +409,16 @@ void *screen_data(void *arg)
                         clnt_data.pos--;
                     }
                 }
-                else if (ch == '\r')
-                {
-                    // printf("Enter\n");
-                    clnt_data.flag = 5;
-                }
                 else
                 {
                     // printf("Nono\n");
                 }
+            }
+
+            if (ch == '\n')
+            {
+                // printf("Enter\n");
+                clnt_data.flag = 5;
             }
             pthread_mutex_unlock(&mutx);
             write(sock, &clnt_data, sizeof(client_data));
