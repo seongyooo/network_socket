@@ -151,7 +151,6 @@ int main(int argc, char *argv[])
     grid_size = (int *)malloc(sizeof(int) * grid_num);
     read(t_sock, grid_size, sizeof(int) * grid_num); */
 
-
     int panel_num;
     read(t_sock, &panel_num, sizeof(int));
     panel_pos = (int *)malloc(sizeof(int) * panel_num);
@@ -276,11 +275,12 @@ void error_handling(char *msg)
 void *screen_print()
 {
     int check;
-    int same = 0;
     int same_k;
     int red_cnt = clnt_init.panel_cnt / 2;
     int blue_cnt = clnt_init.panel_cnt / 2;
 
+    int same[clnt_init.player_cnt];
+    int index;
     int same_cnt[clnt_init.grid_num * clnt_init.grid_num];
     // printf("time: %d\n", game_info.left_time);
     while (start)
@@ -293,30 +293,39 @@ void *screen_print()
         printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
         printf("\n------------------------------\n\n");
 
-        memset(&same_cnt, 0, sizeof(same_cnt));
-        for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
-        {
-            for (int j = 0; j < clnt_init.player_cnt; j++)
-            {
-                if (i == game_info.clnt_data[j].pos)
-                {
-                    same_cnt[i]++;
-                }
-            }
-        }
-
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
             check = 1;
-            same = 0;
+            same_k = -1;
+
+            for (int j = 0; j < clnt_init.player_cnt; j++)
+            {
+                same[j] = -1;
+            }
+            index = 0;
             for (int j = 0; j < clnt_init.player_cnt; j++)
             {
                 // 하나의 i의 여러개의 j가 있는 경우 문제는 앞서서 한번 출력하면 해당 겹친 숫자는 이후에는 출력 X
                 // if(same_cnt[i] == 2)
-
-
+                int test = 0;
                 if (i == game_info.clnt_data[j].pos)
                 {
+                    for (int k = 0; k < index; k++)
+                        if (j == same[k])
+                        {
+                            test = 1;
+                            break;
+                        }
+
+                    if(test) continue;
+                    
+                    for (int k = j + 1; k < clnt_init.player_cnt; k++)
+                    {
+                        if (i == game_info.clnt_data[k].pos)
+                        {
+                            same[index++] = k;
+                        }
+                    }
 
                     if (j % 2)
                     {
@@ -330,28 +339,22 @@ void *screen_print()
                     if (game_info.grid[i] == 0)
                     {
                         printf(RED);
-                        if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
-                        else
-                            printf(" %d ", game_info.clnt_data[j].player_id);
+
+                        printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
                     }
                     else if (game_info.grid[i] == 1)
                     {
                         printf(BLUE);
-                        if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
-                        else
-                            printf(" %d ", game_info.clnt_data[j].player_id);
+
+                        printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
                     }
                     else
                     {
                         printf(WHITE);
-                        if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
-                        else
-                            printf(" %d ", game_info.clnt_data[j].player_id);
+
+                        printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
                     }
 
@@ -397,6 +400,7 @@ void *screen_print()
         }
         pthread_mutex_unlock(&mutx);
     }
+
     return NULL;
 }
 
