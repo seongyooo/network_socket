@@ -309,8 +309,6 @@ void *screen_print()
         {
             check = 1;
             same = 0;
-            same_k = -1;
-
             for (int j = 0; j < clnt_init.player_cnt; j++)
             {
                 // 하나의 i의 여러개의 j가 있는 경우 문제는 앞서서 한번 출력하면 해당 겹친 숫자는 이후에는 출력 X
@@ -333,7 +331,7 @@ void *screen_print()
                     {
                         printf(RED);
                         if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
                         else
                             printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
@@ -342,7 +340,7 @@ void *screen_print()
                     {
                         printf(BLUE);
                         if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
                         else
                             printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
@@ -351,7 +349,7 @@ void *screen_print()
                     {
                         printf(WHITE);
                         if (same_cnt[i] == 2)
-                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[j+1].player_id);
                         else
                             printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
