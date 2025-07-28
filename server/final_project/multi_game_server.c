@@ -23,7 +23,8 @@ void *recv_data(void *arg);
 void *send_data(void *arg);
 void *handle_clnt(void *arg);
 
-typedef struct {
+typedef struct
+{
     int sock;
     int player_id;
 } thread_args;
@@ -40,10 +41,9 @@ typedef struct
 } client_init;
 
 int *grid_size;
-int *panel_pos; 
+int *panel_pos;
 
 // Game Info
-
 
 typedef struct
 {
@@ -52,12 +52,13 @@ typedef struct
     int flag;
 } client_data;
 
-typedef struct{
-    int grid[100*100+1];
+typedef struct
+{
+    int grid[10001];
     int same_cnt;
     double left_time;
     client_data clnt_data[MAX_CLNT];
-}game_information;
+} game_information;
 
 // Game Over
 typedef struct
@@ -78,6 +79,7 @@ int clnt_socks[MAX_CLNT];
 int clnt_cnt = 0;
 char start_msg[30] = "";
 int test = 0;
+int start = 0;
 
 int main(int argc, char *argv[])
 {
@@ -95,7 +97,7 @@ int main(int argc, char *argv[])
 
     pthread_mutex_init(&mutx, NULL);
 
-    // ./server 2 8 4 30 1234
+    // ./server 2 8 16 30 1234
     if (argc != 6)
     {
         printf("Usage: %s <player> <grid size> <panel> <time> <port>\n", argv[0]);
@@ -132,28 +134,40 @@ int main(int argc, char *argv[])
 
     clnt_init.player_cnt = atoi(argv[1]);
     clnt_init.player_id = 0;
-    grid_size = (int *)malloc(sizeof(int) * gird_num);
-    memset(grid_size, -1, gird_num * sizeof(int)); // -1로 초기화
+    /* grid_size = (int *)malloc(sizeof(int) * gird_num);
+    memset(grid_size, 0, gird_num * sizeof(int)); // -1로 초기화 */
 
     clnt_init.panel_cnt = atoi(argv[3]);
     panel_pos = (int *)malloc(sizeof(int) * clnt_init.panel_cnt);
     clnt_init.game_time = atoi(argv[4]);
 
     // game 상태 초기화
-    memset(&game_info, -1, sizeof(game_information));
-    
+    memset(&game_info.grid, -1, sizeof(game_information));
+    /* for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+    {
+        printf("%d, ", grid_size[i]);
+    }
+    printf("\n"); */
+
     // 난수로 panel 위치 할당
     int random = 0;
+    int check = 0;
     for (int i = 0; i < clnt_init.panel_cnt; i++)
     {
         random = (rand() % gird_num);
         panel_pos[i] = random; // panel_pos에는 해당 숫자만 담김
 
+        check=0;
         for (int j = 0; j < i; j++)
         {
-            if (panel_pos[i] == panel_pos[j])
+            if (random == panel_pos[j])
+            {
+                check=1;
                 i--;
+            }
         }
+
+        if(check) continue;
 
         if ((i % 2) == 0) // 빨간색
         {
@@ -169,7 +183,7 @@ int main(int argc, char *argv[])
 
     // 여기서 game info 값 설정 잘하면 됨.
 
-    //game_info.grid = grid_size;
+    // game_info.grid = grid_size;
     /* memcpy(game_info.grid, grid_size, gird_num * sizeof(int));
     for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
     {
@@ -182,9 +196,10 @@ int main(int argc, char *argv[])
 
     pthread_t t_id, send_thread;
 
+    start = 1;
     while (1)
     {
-        thread_args *args = (thread_args*)malloc(sizeof(thread_args));
+        thread_args *args = (thread_args *)malloc(sizeof(thread_args));
 
         clnt_adr_sz = sizeof(clnt_adr);
         args->sock = accept(t_serv_sock, (struct sockaddr *)&clnt_adr, &clnt_adr_sz);
@@ -245,8 +260,12 @@ int main(int argc, char *argv[])
     while (1)
     {
         gettimeofday(&endTime, NULL);
-        total = ( endTime.tv_sec - startTime.tv_sec ) + (( endTime.tv_usec - startTime.tv_usec ) / 1000000);
-        if(total > clnt_init.game_time) break;
+        total = ((endTime.tv_sec - startTime.tv_sec) + ((endTime.tv_usec - startTime.tv_usec) / 1000000)*1.0);
+        if (total > clnt_init.game_time)
+        {
+            start = 0;
+            break;
+        }
         game_info.left_time = total;
         // sleep(1); // 일정주기만큼 보낼것인가? while문마다 보낼 것인가?
         sendto(u_serv_sock, &game_info, sizeof(game_information), 0, (struct sockaddr *)&send_adr, sizeof(send_adr));
@@ -270,7 +289,6 @@ void error_handling(char *msg)
     exit(1);
 }
 
-
 void *send_data(void *arg)
 {
     int sock = *((int *)arg);
@@ -283,19 +301,17 @@ void *send_data(void *arg)
 // 초기 게임 정보 보내는 스레드 함수 이후 클라이언트로 부터 중간 게임 받는 스레드로 전환 결과까지
 void *handle_clnt(void *arg)
 {
-    thread_args args = *((thread_args*)arg);
+    thread_args args = *((thread_args *)arg);
     free(arg);
 
     int clnt_sock = args.sock;
     int player_id = args.player_id;
 
-
     int str_len = 0, i;
-    int start = 1;
 
     client_init player_init;
-    player_init.player_id = player_id; 
-    player_init.player_cnt = clnt_init.player_cnt; 
+    player_init.player_id = player_id;
+    player_init.player_cnt = clnt_init.player_cnt;
     player_init.grid_num = clnt_init.grid_num;
     player_init.panel_cnt = clnt_init.panel_cnt;
     player_init.game_time = clnt_init.game_time;
@@ -307,9 +323,9 @@ void *handle_clnt(void *arg)
 
     // grid 동적할당을 위해서 사이즈 먼저 보내서 할당
     int grid_num = clnt_init.grid_num * clnt_init.grid_num;
-    printf("grid_num: %d\n", grid_num);
+    /* printf("grid_num: %d\n", grid_num);
     write(clnt_sock, &grid_num, sizeof(int));
-    write(clnt_sock, grid_size, sizeof(int) * grid_num);
+    write(clnt_sock, grid_size, sizeof(int) * grid_num); */
 
     write(clnt_sock, &clnt_init.panel_cnt, sizeof(int));
     write(clnt_sock, panel_pos, sizeof(int) * clnt_init.panel_cnt);
@@ -327,30 +343,33 @@ void *handle_clnt(void *arg)
         }
     }
 
-    while (1)
+    while (start)
     {
         str_len = read(clnt_sock, &player_data, sizeof(client_data));
 
         if (str_len <= 0)
             break;
 
-        if(player_data.player_id < 1){
+        if (player_data.player_id < 1)
+        {
             error_handling("index error");
         }
         pthread_mutex_lock(&mutx);
-        game_info.clnt_data[player_data.player_id-1].player_id = player_data.player_id;
-        game_info.clnt_data[player_data.player_id-1].pos = player_data.pos;
-        
-        if(player_data.flag == 5){
-            for(int i=0; i<clnt_init.panel_cnt; i++){
-                if(panel_pos[i] == player_data.pos)
-                    game_info.grid[player_data.pos] = !game_info.grid[player_data.pos];; // 반전 0->1, 1->0
+        game_info.clnt_data[player_data.player_id - 1].player_id = player_data.player_id;
+        game_info.clnt_data[player_data.player_id - 1].pos = player_data.pos;
+
+        if (player_data.flag == 5)
+        {
+            for (int i = 0; i < clnt_init.panel_cnt; i++)
+            {
+                if (panel_pos[i] == player_data.pos)
+                    game_info.grid[player_data.pos] = !game_info.grid[player_data.pos];
+                ; // 반전 0->1, 1->0
             }
         }
         pthread_mutex_unlock(&mutx);
         // (mutex 필요)
         // printf("%d: recv_flag: %d\n", clnt_sock, player_data.flag);
     }
-    close(clnt_sock);
     return NULL;
 }
