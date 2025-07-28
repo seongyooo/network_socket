@@ -24,7 +24,7 @@
 pthread_mutex_t mutx;
 
 void *recv_data(void *arg);
-void *screen_data();
+void *screen_data(void *arg);
 void *screen_print();
 void error_handling(char *msg);
 
@@ -146,10 +146,11 @@ int main(int argc, char *argv[])
     }
 
     // 초기정보 받기
-    int grid_num;
+    /* int grid_num;
     read(t_sock, &grid_num, sizeof(int));
     grid_size = (int *)malloc(sizeof(int) * grid_num);
-    read(t_sock, grid_size, sizeof(int) * grid_num);
+    read(t_sock, grid_size, sizeof(int) * grid_num); */
+
 
     int panel_num;
     read(t_sock, &panel_num, sizeof(int));
@@ -157,19 +158,27 @@ int main(int argc, char *argv[])
     read(t_sock, panel_pos, sizeof(int) * panel_num);
 
     read(t_sock, &clnt_init, sizeof(client_init));
+    /* for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+    {
+        printf("%d, ", grid_size[i]);
+    } */
 
     printf("-----------------------------\n");
     printf("Player count: %d\n", clnt_init.player_cnt);
     printf("Game init ID: %d\n", clnt_init.player_id);
     clnt_data.player_id = clnt_init.player_id;
     printf("Grid size num: %d\n", clnt_init.grid_num);
-    for(int i=0; i<clnt_init.panel_cnt; i++){
-        printf("Panel pos %d: %d\n", i, panel_pos[i]);
-    }
-    for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+    printf("panel count: %d\n", clnt_init.grid_num);
+    /* for (int i = 0; i < clnt_init.panel_cnt; i++)
     {
-        printf("%d, ", grid_size[i]);
-    }
+        printf("Panel pos %d: %d\n", i, panel_pos[i]);
+    } */
+    int count = 0;
+    start = 0;
+    // 정보를 계속 전달하는 main thread 아니면 보내는 스레드에서 정보를 바로 전달할 것인지
+    read(t_sock, &start, sizeof(int));
+    printf("start: %d\n", start);
+
     printf("\n");
     printf("Time: %d\n", clnt_init.game_time);
     printf("-----------------------------\n");
@@ -177,12 +186,6 @@ int main(int argc, char *argv[])
     pthread_t send_thread, screen_thread, sceen_print_thread;
     void *thread_return;
     pthread_create(&screen_thread, NULL, screen_data, (void *)&t_sock);
-
-    int count = 0;
-    start = 0;
-    // 정보를 계속 전달하는 main thread 아니면 보내는 스레드에서 정보를 바로 전달할 것인지
-    read(t_sock, &start, sizeof(int));
-    printf("start: %d\n", start);
 
     // udp socket()
     u_sock = socket(PF_INET, SOCK_DGRAM, 0);
@@ -217,8 +220,11 @@ int main(int argc, char *argv[])
     int str_len;
     while (1)
     {
-        if(game_info.left_time >= clnt_init.game_time) break;
-
+        if (game_info.left_time >= clnt_init.game_time)
+        {
+            start = 0;
+            break;
+        }
         str_len = recvfrom(u_sock, &temp, sizeof(game_information), 0, NULL, 0);
 
         if (str_len > 0)
@@ -232,23 +238,29 @@ int main(int argc, char *argv[])
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
     // main에서 받자마자 바로 출력해버릴까??
 
-    int result=0;
-    for(int i=0; i<clnt_init.panel_cnt; i++){
-        if(game_info.grid[panel_pos[i]] == 0) result++;
-    }
-
-    if((result - clnt_init.panel_cnt/2) == 0){
-        printf("Draw!\n");
-    }else if((result - clnt_init.panel_cnt/2) > 0){
-        printf("Winner: Red!\n");
-    }
-    else{
-        printf("Winner: Blue!\n");
-    }
-
     pthread_join(send_thread, &thread_return);
     pthread_join(screen_thread, &thread_return);
     pthread_join(sceen_print_thread, &thread_return);
+
+    int result = 0;
+    for (int i = 0; i < clnt_init.panel_cnt; i++)
+    {
+        if (game_info.grid[panel_pos[i]] == 0)
+            result++;
+    }
+
+    if ((result - clnt_init.panel_cnt / 2) == 0)
+    {
+        printf("Draw!\n");
+    }
+    else if ((result - clnt_init.panel_cnt / 2) > 0)
+    {
+        printf("Winner: Red!\n");
+    }
+    else
+    {
+        printf("Winner: Blue!\n");
+    }
 
     close(t_sock);
     close(u_sock);
@@ -265,28 +277,49 @@ void *screen_print()
 {
     int check;
     int same = 0;
+    int same_k;
     int red_cnt = clnt_init.panel_cnt / 2;
     int blue_cnt = clnt_init.panel_cnt / 2;
+
+    int same_cnt[clnt_init.grid_num * clnt_init.grid_num];
     // printf("time: %d\n", game_info.left_time);
-    while (1)
+    while (start)
     {
         printf("\033[H\033[J");
-        usleep(6000);
+        usleep(7000);
         // 여기다가 터미널의 출력하는 로직을 만듬. 일단 데이터가 제대로 출력되는지 테스트
         pthread_mutex_lock(&mutx);
-        printf("Time: %f\n", game_info.left_time);
+        printf("Time: %f\n", (double)clnt_init.game_time - game_info.left_time);
         printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
         printf("\n------------------------------\n\n");
-        red_cnt=clnt_init.panel_cnt / 2;
-        blue_cnt=clnt_init.panel_cnt / 2;
+
+        memset(&same_cnt, 0, sizeof(same_cnt));
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
-            check = 1;
-            same = 1;
             for (int j = 0; j < clnt_init.player_cnt; j++)
             {
                 if (i == game_info.clnt_data[j].pos)
                 {
+                    same_cnt[i]++;
+                }
+            }
+        }
+
+        for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+        {
+            check = 1;
+            same = 0;
+            same_k = -1;
+
+            for (int j = 0; j < clnt_init.player_cnt; j++)
+            {
+                // 하나의 i의 여러개의 j가 있는 경우 문제는 앞서서 한번 출력하면 해당 겹친 숫자는 이후에는 출력 X
+                // if(same_cnt[i] == 2)
+
+
+                if (i == game_info.clnt_data[j].pos)
+                {
+
                     if (j % 2)
                     {
                         printf(P_RED);
@@ -296,23 +329,33 @@ void *screen_print()
                         printf(P_BLUE);
                     }
 
-                    // 플레이어가 겹치는 경우 일단은 두명만 3명 초과는 무시(나중에 로직 추가)
-                    /* if ((j != (clnt_init.player_id - 1)) && (game_info.clnt_data[j].pos == game_info.clnt_data[clnt_init.player_id - 1].pos))
+                    if (game_info.grid[i] == 0)
                     {
-                        printf(WHITE);
-                        printf(" %d%d", game_info.clnt_data[clnt_init.player_id - 1].player_id, game_info.clnt_data[j].player_id);
+                        printf(RED);
+                        if (same_cnt[i] == 2)
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                        else
+                            printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
-                        same=0;
+                    }
+                    else if (game_info.grid[i] == 1)
+                    {
+                        printf(BLUE);
+                        if (same_cnt[i] == 2)
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                        else
+                            printf(" %d ", game_info.clnt_data[j].player_id);
+                        printf(RESET);
                     }
                     else
                     {
                         printf(WHITE);
-                        printf(" %d ", game_info.clnt_data[j].player_id);
+                        if (same_cnt[i] == 2)
+                            printf(" %d%d", game_info.clnt_data[j].player_id, game_info.clnt_data[same_k].player_id);
+                        else
+                            printf(" %d ", game_info.clnt_data[j].player_id);
                         printf(RESET);
-                    } */
-                    printf(WHITE);
-                    printf(" %d ", game_info.clnt_data[j].player_id);
-                    printf(RESET);
+                    }
 
                     check = 0;
                 }
@@ -338,16 +381,16 @@ void *screen_print()
                     printf("   ");
                     printf(RESET);
                 }
+            }
 
-                // 이 화면에 나오는 vs 로직은 나중에 처리
-                if(game_info.grid[i] == 0){
+            red_cnt = 0;
+            blue_cnt = clnt_init.panel_cnt;
+            for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
+            {
+                if (game_info.grid[i] == 0)
+                {
                     red_cnt++;
                     blue_cnt--;
-                }
-
-                if(game_info.grid[i] == 1){
-                    red_cnt--;
-                    blue_cnt++;
                 }
             }
 
@@ -367,7 +410,7 @@ void *screen_data(void *arg)
     // ch = getch();
 
     clnt_data.pos = 0;
-    while (1)
+    while (start)
     {
         if (kbhit())
         {

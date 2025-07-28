@@ -163,13 +163,21 @@ int main(int argc, char *argv[])
     printf("Game init ID: %d\n", clnt_init.player_id);
     clnt_data.player_id = clnt_init.player_id;
     printf("Grid size num: %d\n", clnt_init.grid_num);
-    for(int i=0; i<clnt_init.panel_cnt; i++){
+    for (int i = 0; i < clnt_init.panel_cnt; i++)
+    {
         printf("Panel pos %d: %d\n", i, panel_pos[i]);
     }
     for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
     {
         printf("%d, ", grid_size[i]);
     }
+
+    int count = 0;
+    start = 0;
+    // 정보를 계속 전달하는 main thread 아니면 보내는 스레드에서 정보를 바로 전달할 것인지
+    read(t_sock, &start, sizeof(int));
+    printf("start: %d\n", start);
+
     printf("\n");
     printf("Time: %d\n", clnt_init.game_time);
     printf("-----------------------------\n");
@@ -177,12 +185,6 @@ int main(int argc, char *argv[])
     pthread_t send_thread, screen_thread, sceen_print_thread;
     void *thread_return;
     pthread_create(&screen_thread, NULL, screen_data, (void *)&t_sock);
-
-    int count = 0;
-    start = 0;
-    // 정보를 계속 전달하는 main thread 아니면 보내는 스레드에서 정보를 바로 전달할 것인지
-    read(t_sock, &start, sizeof(int));
-    printf("start: %d\n", start);
 
     // udp socket()
     u_sock = socket(PF_INET, SOCK_DGRAM, 0);
@@ -217,8 +219,11 @@ int main(int argc, char *argv[])
     int str_len;
     while (1)
     {
-        if(game_info.left_time >= clnt_init.game_time) break;
-
+        if (game_info.left_time >= clnt_init.game_time)
+        {
+            start=0;
+            break;
+        }
         str_len = recvfrom(u_sock, &temp, sizeof(game_information), 0, NULL, 0);
 
         if (str_len > 0)
@@ -232,23 +237,29 @@ int main(int argc, char *argv[])
     // main threa에서 정보를 받고 터미널로 출력해주는 스레드가 값을 받도록 한다(전역변수로 하든, 인자로 넘겨주든)
     // main에서 받자마자 바로 출력해버릴까??
 
-    int result=0;
-    for(int i=0; i<clnt_init.panel_cnt; i++){
-        if(game_info.grid[panel_pos[i]] == 0) result++;
-    }
-
-    if((result - clnt_init.panel_cnt/2) == 0){
-        printf("Draw!\n");
-    }else if((result - clnt_init.panel_cnt/2) > 0){
-        printf("Winner: Red!\n");
-    }
-    else{
-        printf("Winner: Blue!\n");
-    }
-
     pthread_join(send_thread, &thread_return);
     pthread_join(screen_thread, &thread_return);
     pthread_join(sceen_print_thread, &thread_return);
+
+    int result = 0;
+    for (int i = 0; i < clnt_init.panel_cnt; i++)
+    {
+        if (game_info.grid[panel_pos[i]] == 0)
+            result++;
+    }
+
+    if ((result - clnt_init.panel_cnt / 2) == 0)
+    {
+        printf("Draw!\n");
+    }
+    else if ((result - clnt_init.panel_cnt / 2) > 0)
+    {
+        printf("Winner: Red!\n");
+    }
+    else
+    {
+        printf("Winner: Blue!\n");
+    }
 
     close(t_sock);
     close(u_sock);
@@ -268,7 +279,7 @@ void *screen_print()
     int red_cnt = clnt_init.panel_cnt / 2;
     int blue_cnt = clnt_init.panel_cnt / 2;
     // printf("time: %d\n", game_info.left_time);
-    while (1)
+    while (start)
     {
         printf("\033[H\033[J");
         usleep(6000);
@@ -277,8 +288,8 @@ void *screen_print()
         printf("Time: %f\n", game_info.left_time);
         printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
         printf("\n------------------------------\n\n");
-        red_cnt=clnt_init.panel_cnt / 2;
-        blue_cnt=clnt_init.panel_cnt / 2;
+        red_cnt = clnt_init.panel_cnt / 2;
+        blue_cnt = clnt_init.panel_cnt / 2;
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
             check = 1;
@@ -340,12 +351,14 @@ void *screen_print()
                 }
 
                 // 이 화면에 나오는 vs 로직은 나중에 처리
-                if(game_info.grid[i] == 0){
+                if (game_info.grid[i] == 0)
+                {
                     red_cnt++;
                     blue_cnt--;
                 }
 
-                if(game_info.grid[i] == 1){
+                if (game_info.grid[i] == 1)
+                {
                     red_cnt--;
                     blue_cnt++;
                 }
@@ -367,7 +380,7 @@ void *screen_data(void *arg)
     // ch = getch();
 
     clnt_data.pos = 0;
-    while (1)
+    while (start)
     {
         if (kbhit())
         {
