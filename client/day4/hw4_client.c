@@ -19,20 +19,16 @@
 #define NAME_SIZE 30
 #define DATA_SIZE 1024
 
+#define GREEN "\x1b[32m"
+#define YELLOW "\x1b[33m"
+#define RESET "\x1b[0m"
+
+
 pthread_mutex_t display_mutex;
 
 void gotoxy(int x, int y)
 {
     printf("%c[%d;%df", 0x1B, y, x);
-}
-
-void clrscr()
-{
-    for (int i = 0; i < 10; i++)
-    {
-        fprintf(stdout, "\033[2K");
-        fflush(stdout);
-    }
 }
 
 int getch()
@@ -101,6 +97,7 @@ int main(int argc, char *argv[])
 
     void *thread_return;
 
+    // ./client 203.252.112.31 1234
     if (argc != 3)
     {
         printf("Usage %s <IP> <port> \n", argv[0]);
@@ -125,11 +122,11 @@ int main(int argc, char *argv[])
 
     pthread_t snd_thread, rcv_thread;
 
-    printf("\033[2J");
+    printf("\033[2J"); // 화면을 지우고 커서를 왼쪽 상단 모서리(0행, 0열)로 이동
     gotoxy(1, 1);
-    printf("\033[38;5;2m");
+    printf(GREEN);
     printf("Search word: ");
-    printf("\033[0m");
+    printf(RESET);
     gotoxy(1, 2);
     printf("--------------------------\n");
     fflush(stdout);
@@ -229,7 +226,7 @@ void *recv_data(void *arg)
         for (int i = 0; i < 10; i++)
         {
             gotoxy(1, 3 + i);
-            printf("\033[2K");
+            printf("\033[2K"); //	커서 위치에서 현재 줄의 끝까지 지우기
             fflush(stdout);
         }
 
@@ -257,9 +254,9 @@ void *recv_data(void *arg)
 
                 for (int k = index; k < index + strlen(name_msg); k++)
                 {
-                    printf("\033[38;5;3m");
+                    printf(YELLOW);
                     printf("%c", list[k]);
-                    printf("\033[0m");
+                    printf(RESET);
                 }
 
                 for (int k = index + strlen(name_msg); k < str_len; k++)
