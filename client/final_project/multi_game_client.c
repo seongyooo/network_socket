@@ -273,6 +273,8 @@ void *screen_print()
     {
         printf("\033[H\033[J");
         usleep(7000);
+        // usleep(300000);
+        // usleep(1000);
         pthread_mutex_lock(&mutx);
         printf("Time: %f\n", (double)clnt_init.game_time - game_info.left_time);
         printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
