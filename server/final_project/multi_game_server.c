@@ -83,6 +83,24 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    // 인자 예외처리
+
+    // 음수 체크
+    for(int i=1; i<5; i++){
+        if(argv[i] <= 0){
+            printf("Usage: %s positive number\n", argv[i]);
+            exit(1);
+        }
+    }
+
+    // 그리드 사이즈보다 패널 수가 더 많은 경우
+    if(atoi(argv[2]) * atoi(argv[2]) < atoi(argv[3])){
+        printf("Usage: %d >= %d\n", atoi(argv[2]) * atoi(argv[2]), atoi(argv[3]));
+        exit(1);
+    }
+
+
+
     // tcp socket 생성
     t_serv_sock = socket(PF_INET, SOCK_STREAM, 0);
     if (t_serv_sock == -1)
