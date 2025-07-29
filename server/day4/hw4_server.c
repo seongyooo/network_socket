@@ -73,11 +73,6 @@ int main(int argc, char *argv[])
 
     file_cnt = load_data(argv[2]);
 
-    for (int i = 0; i < file_cnt; i++)
-    {
-        //printf("%s: %d\n", serv_cnt[i].data_info.data_name, serv_cnt[i].data_info.data_size);
-    }
-
     while (1)
     {
         clnt_adr_sz = sizeof(clnt_addr);
