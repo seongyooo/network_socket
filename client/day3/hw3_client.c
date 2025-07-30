@@ -18,7 +18,7 @@ typedef struct
     char dir_name[BUF_SIZE][100];
     char file_name[BUF_SIZE][100];
     long file_size[BUF_SIZE];
-
+    char paht_name[100];
 } file_information;
 
 typedef struct
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
     // Interface
     int dir_num, file_num;
     char char_num[BUF_SIZE];
-    int is_dir=0;
+    int is_dir = 0;
     while (1)
     {
         fputs("MENU\n", stdout);
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
 
         if (!strcmp(input, "B\n"))
         {
-            is_dir=1;
+            is_dir = 1;
             fputs("Input directory number( -1 -> cd ..): ", stdout);
             fgets(char_num, BUF_SIZE, stdin);
             dir_num = atoi(char_num);
@@ -188,8 +188,8 @@ int main(int argc, char *argv[])
             fp = fopen(file_info.file_name[file_num - 1], "wb");
 
             char buf[BUF_SIZE];
-            read_cnt=0;
-            total=0;
+            read_cnt = 0;
+            total = 0;
             while (total < file_info.file_size[file_num - 1])
             {
                 read_cnt = read(sock, buf, sizeof(buf));
@@ -256,10 +256,10 @@ int main(int argc, char *argv[])
             check_msg.index = file_num;
             write(sock, &check_msg, sizeof(message));
 
-            data_index.name_len = strlen(client_info.file_name[file_num-1]);
+            data_index.name_len = strlen(client_info.file_name[file_num - 1]);
             write(sock, &data_index.name_len, sizeof(int));
-            write(sock, client_info.file_name[file_num-1], data_index.name_len);
-            write(sock, &client_info.file_size[file_num-1], sizeof(long));
+            write(sock, client_info.file_name[file_num - 1], data_index.name_len);
+            write(sock, &client_info.file_size[file_num - 1], sizeof(long));
 
             int read_cnt;
             char buf[BUF_SIZE];
@@ -277,7 +277,6 @@ int main(int argc, char *argv[])
                 write(sock, buf, read_cnt);
             }
             fclose(fp);
-
         }
     }
 

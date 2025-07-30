@@ -273,13 +273,15 @@ void *screen_print()
     {
         printf("\033[H\033[J");
         usleep(7000);
-        // usleep(300000);
+        // usleep(100000);
         // usleep(1000);
+        // sleep(1);
         pthread_mutex_lock(&mutx);
         printf("Time: %f\n", (double)clnt_init.game_time - game_info.left_time);
         printf("Red: %d  vs  Blue: %d", red_cnt, blue_cnt);
         printf("\n------------------------------\n\n");
 
+        // for문으로 출력하기에, grid size가 커지면 화면 깜박임이 심해짐. sprintf()로 한번에 입력받았다가 출력?
         for (int i = 0; i < clnt_init.grid_num * clnt_init.grid_num; i++)
         {
             check = 1;
@@ -398,6 +400,17 @@ void *screen_data(void *arg)
     int standard = clnt_init.grid_num;
 
     clnt_data.pos = 0;
+    // 게임 시작 전에 버퍼에 남아 있는 문자열로 인해서 플레이어가 미리 움직이는 예외 상황 처리
+
+    /* while (1)
+    {
+        ch = getch();
+        if (start == 1 && ch == NULL)
+        {
+            break;
+        }
+    } */
+
     while (start)
     {
         if (kbhit())
