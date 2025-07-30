@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 
     pthread_mutex_init(&mutx, NULL);
 
-    // ./server 4 8 16 30 1234
+    // ./server 4 10 20 30 1234
     if (argc != 6)
     {
         printf("Usage: %s <player> <grid size> <panel> <time> <port>\n", argv[0]);
@@ -84,7 +84,6 @@ int main(int argc, char *argv[])
     }
 
     // 인자 예외처리
-
     // 음수 체크
     for(int i=1; i<5; i++){
         if(argv[i] <= 0){
@@ -98,8 +97,6 @@ int main(int argc, char *argv[])
         printf("Usage: %d >= %d\n", atoi(argv[2]) * atoi(argv[2]), atoi(argv[3]));
         exit(1);
     }
-
-
 
     // tcp socket 생성
     t_serv_sock = socket(PF_INET, SOCK_STREAM, 0);

@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <dirent.h>
+#include <pthread.h>
 
 #define BUF_SIZE 1024
 #define EPOLL_SIZE 1024
@@ -21,6 +22,7 @@ typedef struct
     char dir_name[BUF_SIZE][100];
     char file_name[BUF_SIZE][100];
     long file_size[BUF_SIZE];
+    char paht_name[100];
 
 } file_information;
 
@@ -40,15 +42,25 @@ typedef struct
     int dir_index;
 } message;
 
-typedef struct{
+typedef struct
+{
     int fd;
     file_information file_info;
     pkt file_pkt;
     int init;
     message check_msg;
-}sock_cnt;
+} sock_cnt;
+
+typedef struct
+{
+    int sock;
+    int file_size;
+    char path_name[BUF_SIZE];
+} thread_args;
 
 void error_handling(char *msg);
+void *handle_clnt(void *arg);
+void *handle_upload(void *arg);
 
 int main(int argc, char *argv[])
 {
@@ -70,6 +82,8 @@ int main(int argc, char *argv[])
 
     sock_cnt *serv_cnt;
 
+    pthread_t p_id, u_id;
+
     int dir_idx = 0, file_idx = 0;
 
     if (argc != 2)
@@ -79,7 +93,7 @@ int main(int argc, char *argv[])
     }
 
     serv_cnt = malloc(sizeof(sock_cnt) * BUF_SIZE);
-    
+
     // 소켓 생성
     serv_sock = socket(PF_INET, SOCK_STREAM, 0);
     if (serv_sock == -1)
@@ -112,8 +126,6 @@ int main(int argc, char *argv[])
     event.events = EPOLLIN;
     event.data.fd = serv_sock;
     epoll_ctl(epfd, EPOLL_CTL_ADD, serv_sock, &event);
-
-    
 
     char file_path[100];
 
@@ -208,16 +220,21 @@ int main(int argc, char *argv[])
                 if (serv_cnt[ep_events[i].data.fd].check_msg.msg == 'B')
                 {
 
-                    if(serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1){
+                    if (serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1)
+                    {
                         dp = opendir(".");
                         printf("Present dir_name: %s\n", "present dir");
+                        strcpy(serv_cnt[ep_events[i].data.fd].file_info.paht_name, "./");
+                        // serv_cnt[ep_events[i].data.fd].file_info.paht_name[strlen(serv_cnt[ep_events[i].data.fd].file_info.paht_name)] = '\0';
                     }
-                    else{
+                    else
+                    {
                         dp = opendir(serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
                         printf("Present dir_name: %s\n", serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
+                        strcpy(serv_cnt[ep_events[i].data.fd].file_info.paht_name, "./");
+                        strcat(serv_cnt[ep_events[i].data.fd].file_info.paht_name, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
+                        strcat(serv_cnt[ep_events[i].data.fd].file_info.paht_name, "/");
                     }
-
-                    
 
                     dir_idx = 0;
                     file_idx = 0;
@@ -228,16 +245,17 @@ int main(int argc, char *argv[])
                             continue;
                         }
 
-                        if(serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1){
+                        if (serv_cnt[ep_events[i].data.fd].check_msg.dir_index == -1)
+                        {
                             strcpy(file_path, file->d_name);
                         }
-                        else{
+                        else
+                        {
                             strcpy(file_path, "./");
                             strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
                             strcat(file_path, "/");
                             strcat(file_path, file->d_name);
                         }
-
 
                         if (stat(file_path, &sb) == -1)
                         {
@@ -284,25 +302,33 @@ int main(int argc, char *argv[])
                     int read_cnt;
                     char buf[BUF_SIZE];
 
-                    // 구조체에 현재 클라이언트 path 경로 저장 
-                    if(serv_cnt[ep_events[i].data.fd].check_msg.is_dir){
+                    // 구조체에 현재 클라이언트 path 경로 저장
+                    if (serv_cnt[ep_events[i].data.fd].check_msg.is_dir)
+                    {
                         strcpy(file_path, "./");
                         strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.dir_name[serv_cnt[ep_events[i].data.fd].check_msg.dir_index - 1]);
                         strcat(file_path, "/");
                         strcat(file_path, serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
-
-                        fp = fopen(file_path, "rb");
+                        file_path[strlen(file_path)] = '\0';
+                        // fp = fopen(file_path, "rb");
                     }
-                    else{
-                        fp = fopen(serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index-1], "rb");
-                    }
-
-                    // 멀티 플렉싱 구현 안됨.
-                    while ((read_cnt = fread((void *)buf, 1, BUF_SIZE, fp)) > 0)
+                    else
                     {
-                        write(ep_events[i].data.fd, buf, read_cnt);
+                        // fp = fopen(serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1], "rb");
+                        strcpy(file_path, serv_cnt[ep_events[i].data.fd].file_info.file_name[serv_cnt[ep_events[i].data.fd].check_msg.index - 1]);
+                        file_path[strlen(file_path)] = '\0';
                     }
-                    fclose(fp);
+
+                    // 멀티 플렉싱 구현 안됨. 여기서 락이 걸려서? non-blocking을 해야 하나?
+                    // thread를 생성을 해서, IO 멀티플렉싱을 구현, function 레벨로 구현
+                    thread_args *args = malloc(sizeof(thread_args));
+
+                    args->sock = ep_events[i].data.fd;
+                    strcpy(args->path_name, file_path);
+                    args->path_name[strlen(args->path_name)] = '\0';
+
+                    pthread_create(&p_id, NULL, handle_clnt, args);
+                    pthread_detach(p_id);
                 }
 
                 // 클라이언트 소켓 종료
@@ -318,24 +344,28 @@ int main(int argc, char *argv[])
                     char file_name[100];
                     int file_len;
                     long file_size;
+                    char temp[BUF_SIZE];
 
                     read(ep_events[i].data.fd, &file_len, sizeof(int));
                     read(ep_events[i].data.fd, file_name, file_len);
                     read(ep_events[i].data.fd, &file_size, sizeof(long));
                     file_name[file_len] = '\0';
 
-                    fp = fopen(file_name, "wb");
-                    int total=0;
-                    int read_cnt=0;
-                    char buf[BUF_SIZE];
-                    while (total < file_size)
-                    {
-                        read_cnt = read(ep_events[i].data.fd, buf, sizeof(buf));
+                    strcpy(temp, serv_cnt[ep_events[i].data.fd].file_info.paht_name);
+                    strcat(temp, file_name);
+                    temp[strlen(temp)] = '\0';
 
-                        fwrite((void *)buf, 1, read_cnt, fp);
-                        total += read_cnt;
-                    }
-                    fclose(fp);
+                    thread_args *args_u = malloc(sizeof(thread_args));
+
+                    args_u->sock = ep_events[i].data.fd;
+                    args_u->file_size = file_size;
+                    strcpy(args_u->path_name, temp);
+                    args_u->path_name[strlen(args_u->path_name)] = '\0';
+
+
+                    epoll_ctl(epfd, EPOLL_CTL_DEL, clnt_sock, NULL);
+                    pthread_create(&u_id, NULL, handle_upload, args_u);
+                    pthread_detach(u_id);
                 }
             }
         }
@@ -350,4 +380,63 @@ void error_handling(char *msg)
 {
     printf("%s\n", msg);
     exit(1);
+}
+
+void *handle_clnt(void *arg)
+{
+    thread_args *args = ((thread_args *)arg);
+
+    int clnt_sock = args->sock;
+    char path_name[BUF_SIZE];
+
+    strcpy(path_name, args->path_name);
+    path_name[strlen(path_name)] = '\0';
+
+    int read_cnt = 0;
+    char buf[BUF_SIZE];
+    FILE *fp;
+
+    fp = fopen(path_name, "rb");
+
+    while ((read_cnt = fread((void *)buf, 1, BUF_SIZE, fp)) > 0)
+    {
+        write(clnt_sock, buf, read_cnt);
+    }
+
+    fclose(fp);
+    free(args);
+
+    return NULL;
+}
+
+void *handle_upload(void *arg)
+{
+    thread_args *args = ((thread_args *)arg);
+
+    FILE *fp;
+    int clnt_sock = args->sock;
+    char path_name[BUF_SIZE];
+    int file_size = args->file_size;
+
+    strcpy(path_name, args->path_name);
+    path_name[strlen(path_name)] = '\0';
+
+    fp = fopen(path_name, "wb");
+    int total = 0;
+    int read_cnt = 0;
+    char buf[BUF_SIZE];
+
+    while (total < file_size)
+    {
+        read_cnt = read(clnt_sock, buf, sizeof(buf));
+
+        fwrite((void *)buf, 1, read_cnt, fp);
+        total += read_cnt;
+    }
+
+    close(clnt_sock);
+    fclose(fp);
+    free(args);
+
+    return NULL;
 }
