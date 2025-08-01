@@ -401,15 +401,14 @@ void *screen_data(void *arg)
 
     clnt_data.pos = 0;
     // 게임 시작 전에 버퍼에 남아 있는 문자열로 인해서 플레이어가 미리 움직이는 예외 상황 처리
-
-    /* while (1)
+    while (1)
     {
-        ch = getch();
-        if (start == 1 && ch == NULL)
+        if (start == 1)
         {
+            tcflush(0, TCIFLUSH);
             break;
         }
-    } */
+    }
 
     while (start)
     {
